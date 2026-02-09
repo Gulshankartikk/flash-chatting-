@@ -10,4 +10,11 @@ const transporter =nodemailer.createTransport({
         Pass:process.env.EMAIL_PASS,
     }
 });
-transporter
+transporter .verify((error,success)=>{
+    if(error){
+        console.error('Gmail services connection failed')
+
+    }else{
+        console.log('Gmail configured properly and ready to send email')
+    }
+})
