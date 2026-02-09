@@ -47,4 +47,44 @@ const sendOtp =async(req,res)=> {
 
 //step -2 verify otp
 
-const 
+const verifyOtp = async(res,req) =>{
+    const {phoneNumber,phoneSuffix,email,otp}= req.body;
+
+    try{
+        let USER;
+        if(email){
+               USER =await User.findOne({email});
+               if(!user){
+                return response(res,404,'User not found')
+               }
+
+               const now = new Date();
+               if(!user.emailOtp ||String(user.emailOtp) !==String(otp) || now > new Date(user.emailOtpExpiry)){
+                return response(res,400,'Invalid or expired otp')
+               };
+               user.isVerified =true;
+               user.emailOtp =null;
+               user.emailOtpExpiry =null;
+               await user.save();
+        }
+        else{
+            if(!phoneNumber||!phoneSuffix){
+                return response(res,400,'Phone number and suffix are required');
+            }
+            const fullPhoneNumber = `${phoneSuffix}${phoneNumber}`;
+            user =await User.findOne({phoneNumber});
+            if(!user){
+                return response(res,404,'User not found');
+
+            }
+            const result =await twilloService.verifyOtp(fullPhoneNumber,otp);
+            if(result.status !=="approved"){
+                return response(res,400,"Invalid otp");
+            }
+            user.isVerified =true;
+            await user.save();
+        }
+        
+    }catch (error) {}
+
+};
