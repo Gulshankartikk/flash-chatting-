@@ -1,4 +1,8 @@
+const User = require("../models/user");
+const sendOtpToEmail = require("../services/emailService");
 const otpGenerate = require("../utils/otpGenerater");
+const response = require("../utils/responseHandler");
+const twilloService =require("../services/twilloService")
 
 
 
@@ -19,7 +23,7 @@ const sendOtp =async(req,res)=> {
             user.emailOtp =otp;
             user.emailOtpExpiry = expiry;
             await user.save();
-
+            await sendOtpToEmail(email,otp)
             return response(res,200, 'Otp sent to your email',{email});
         }
         if(!phoneNumber ||!phoneSuffix) {
@@ -30,7 +34,7 @@ const sendOtp =async(req,res)=> {
         if(!user){
             user = await new User ({phoneNumber,phoneSuffix})
         }
-
+        await twilloService.sendOtpToEmailPhoneNumber(fullPhonenumber)
         await user.save();
 
         return response(res,200,'Otp send successfully',user)
@@ -39,3 +43,8 @@ const sendOtp =async(req,res)=> {
         return response(res,500,'Internal server error')
     }
 }
+
+
+//step -2 verify otp
+
+const 
