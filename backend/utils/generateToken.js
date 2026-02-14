@@ -7,4 +7,4 @@ const generateToken =(userId) =>{
      })
 }
 
-Module.exports = generateToken
+module.exports = generateToken
