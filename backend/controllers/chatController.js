@@ -2,6 +2,7 @@ const { uploadFileCloudinary } = require("../config/cloudinaryConfig");
 const Conversation = require("../models/Conversation");
 const response = require("../utils/responseHandler");
 const Message = require("../models/message");
+const conversation = require("../models/status");
 
 exports.sendMessage = async (req, res) => {
   try {
@@ -76,3 +77,22 @@ exports.sendMessage = async (req, res) => {
 };
 
 // get all conversation
+exports.getConversation =async (req,res)=>{
+  const userId =req.user.userId;
+  try{
+    let conversation = await conversation.find({
+    participants:userId,
+}).populate("participants","username profilePicture isOnline lastSeen")
+.populate({
+  path:"lastMessage",
+  populate:{
+    path:"sender receiver",
+    select:"username profilePicture"
+  }
+}).sort({updatedAt:-1})
+return response(res,201,'conversation get successfully',conversation)
+} catch(error){
+  console.error(error);
+  return response(res,500,'internal server error')
+}
+};
