@@ -32,4 +32,7 @@ const conversationSchema = new mongoose.Schema(
 // prevent duplicate 1-1 conversations
 conversationSchema.index({ participants: 1 });
 
-module.exports = mongoose.model("Conversation", conversationSchema);
+// ✅ safe export
+module.exports =
+  mongoose.models.Conversation ||
+  mongoose.model("Conversation", conversationSchema);
