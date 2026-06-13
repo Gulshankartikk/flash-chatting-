@@ -13,8 +13,8 @@ const PORT = process.env.PORT || 8000;
 const app = express();
 
 // Middleware
-app.use(express.json());
-app.use(cookieParser());
+app.use(express.json()); // parser body data
+app.use(cookieParser());// parser token on every request
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cors());
 

@@ -3,7 +3,10 @@ const mongoose = require("mongoose");
 const conversationSchema = new mongoose.Schema(
   {
     participants: [
-      { type: mongoose.Schema.Types.ObjectId, ref: "User" }
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
     ],
 
     lastMessage: {
@@ -16,9 +19,14 @@ const conversationSchema = new mongoose.Schema(
       default: 0,
     },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+  }
 );
 
-const Conversation = mongoose.model("Conversation", conversationSchema);
+// Prevent OverwriteModelError
+const Conversation =
+  mongoose.models.Conversation ||
+  mongoose.model("Conversation", conversationSchema);
 
 module.exports = Conversation;
