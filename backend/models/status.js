@@ -1,32 +1,15 @@
 const mongoose = require("mongoose");
 
-const conversationSchema = new mongoose.Schema(
-  {
-    participants: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-      },
-    ],
-
-    lastMessage: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Message",
-    },
-
-    unreadCount: {
-      type: Number,
-      default: 0,
-    },
-  },
-  {
-    timestamps: true,
+const statusSchema = new mongoose.Schema({
+  user:{type:mongoose.Schema.ObjectId, ref:'User',required:true},
+  content:{type:String,required:true},
+  contentType:{type:string,enum:['image','video','text'],default:'text'},
+  viewers:[{type:mongoose.schema.Type.ObjectId, ref:'User'}]
   }
+    
 );
 
 // Prevent OverwriteModelError
-const Conversation =
-  mongoose.models.Conversation ||
-  mongoose.model("Conversation", conversationSchema);
+const Status = mongoose.model('status',statusSchema)
 
 module.exports = Conversation;

@@ -4,7 +4,7 @@ const authMiddleware = require("../middleware/authMiddleware");
 const { multerMiddleware } = require("../config/cloudinaryConfig");
 
 const router = express.Router();
-
+// protected route
 router.post(
   "/send-message",
   authMiddleware,
