@@ -1,20 +1,16 @@
 const { uploadFileCloudinary } = require("../config/cloudinaryConfig");
-const status = require("../models/status");
-const Message = require("../models/message");
+const Status = require("../models/status");
 const response = require("../utils/responseHandler");
-const status = require("../models/status");
-const status = require("../models/status");
-const status = require("../models/status");
 
-// ================= SEND MESSAGE =================
-exports.createStatus= async (req, res) => {
+// ================= CREATE STATUS =================
+exports.createStatus = async (req, res) => {
   try {
-    const {  content } = req.body;
-    const userId =req.user.userId;
+    const { content } = req.body;
+    const userId = req.user.userId;
     const file = req.file;
 
-   let mediaUrl = null;
-   let finalcontentType = contentType || "text";
+    let mediaUrl = null;
+    let finalcontentType = "text";
 
     // handle file upload
     if (file) {
@@ -39,96 +35,111 @@ exports.createStatus= async (req, res) => {
       return response(res, 400, "Message content or media is required");
     }
 
-    const expiresAt =new Date();
-    expiresAt.setHoure(expiresAt.getHours()+24)
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 24);
 
-    const status  = new status({
-      user:userId,
-      content:mediaUrl ||content,
-      contentType:finalcontentType,
-      imageOrVideoUrl,
-      messageStatus,
+    const newStatus = new Status({
+      user: userId,
+      content: mediaUrl || content,
+      contentType: finalcontentType,
+      expiresAt,
     });
 
-    await status.save();
+    await newStatus.save();
 
-   
-
-  
-
-    const populatedstatus = await Message.findOne(status?._id)
+    const populatedStatus = await Status.findById(newStatus._id)
       .populate("user", "username profilePicture")
-      .populate("viewers", "username profilePicture")
-      
+      .populate("viewers", "username profilePicture");
 
-    return response(res, 200, "status created successfully", populatedstatus);
+    return response(
+      res,
+      200,
+      "Status created successfully",
+      populatedStatus
+    );
   } catch (error) {
     console.error(error);
     return response(res, 500, "Internal server error");
   }
 };
 
-exports.getstatus = async(res,res) =>{
-    try{
-        const statuses =await status.find({
-            expiresAt:{$gt:new Date()},
-        })
-        .populate("user","username profilepicture")
-        .populate("viewers","username profilepicture")
-        .sort({cretedAt: -1});
+// ================= GET STATUS =================
+exports.getStatus = async (req, res) => {
+  try {
+    const statuses = await Status.find({
+      expiresAt: { $gt: new Date() },
+    })
+      .populate("user", "username profilePicture")
+      .populate("viewers", "username profilePicture")
+      .sort({ createdAt: -1 });
 
-        return response(res,200,"statuses retrived successfully",statuses)
-    } catch(error){
-        console.error(error);
-        return response(res,500, "Internal server error");
-    }
-
+    return response(
+      res,
+      200,
+      "Statuses retrieved successfully",
+      statuses
+    );
+  } catch (error) {
+    console.error(error);
+    return response(res, 500, "Internal server error");
+  }
 };
 
-exports.viewStatus = async(req,res) =>{
-    const{statusId} =req.prams;
-    const userId =req.user.userId;
-    try{
-        const status =await status.findById(statusId);
-        if(!status){
-            return response(res,404, 'status not found')
-        }
-        if(!status.viewer.includes(userId)){
-            status.viewer.push(userId);
-            await status.save();
+// ================= VIEW STATUS =================
+exports.viewStatus = async (req, res) => {
+  const { statusId } = req.params;
+  const userId = req.user.userId;
 
-            const updateStatus = await status.findById(statusId)
-             .populate("user","username profilepicture")
-             .populate("viewers","username profilepicture")
-        }else{
-            console.log('user already viewed the status')
-        }
-       return response(res,200,'status viewed successfully')
-    }catch(error){
-        console.error(error);
-        return response(res,500, "Internal server error");
+  try {
+    const status = await Status.findById(statusId);
 
+    if (!status) {
+      return response(res, 404, "Status not found");
     }
+
+    if (!status.viewers.includes(userId)) {
+      status.viewers.push(userId);
+      await status.save();
+
+      await Status.findById(statusId)
+        .populate("user", "username profilePicture")
+        .populate("viewers", "username profilePicture");
+    } else {
+      console.log("User already viewed the status");
+    }
+
+    return response(res, 200, "Status viewed successfully");
+  } catch (error) {
+    console.error(error);
+    return response(res, 500, "Internal server error");
+  }
 };
 
-exports.deleteStatus =async(req,res) =>{
-    const {statusId} =req.prams;
-    const userId =req.user.userId;
-    try{
-        const status =await status.findById(statusId);
-        if(!status){
-            return response(req, 404,"status not found" );
-        }
-        if(status.user.tostring() !==userId){
-            return response(res,403, "not authorized to delete this status")
-        }
-        await status.deleteOne();
+// ================= DELETE STATUS =================
+exports.deleteStatus = async (req, res) => {
+  const { statusId } = req.params;
+  const userId = req.user.userId;
 
-        return response(res,200,"status deleted successfully")
-    }catch(error){
-        console.error(error);
-        return response(res,500, "Internal server error");
+  try {
+    const status = await Status.findById(statusId);
 
+    if (!status) {
+      return response(res, 404, "Status not found");
     }
-    
-}
+
+    if (status.user.toString() !== userId) {
+      return response(
+        res,
+        403,
+        "Not authorized to delete this status"
+      );
+    }
+
+    await status.deleteOne();
+
+    return response(res, 200, "Status deleted successfully");
+  } catch (error) {
+    console.error(error);
+    return response(res, 500, "Internal server error");
+  }
+};
