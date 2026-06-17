@@ -51,12 +51,18 @@ exports.createStatus = async (req, res) => {
       .populate("user", "username profilePicture")
       .populate("viewers", "username profilePicture");
 
-    return response(
-      res,
-      200,
-      "Status created successfully",
-      populatedStatus
-    );
+    // emit socket event
+
+    if (req.io && req.socketUserMap) {
+      //broadcast to all connecting users except the creator
+      for (const [connectedId, socketId] of req.socketUserMap) {
+        if (connectedUserId !== userId) {
+          req.io.to(socketId).emit("new_status", populatedStatus);
+        }
+      }
+    }
+
+    return response(res, 200, "Status created successfully", populatedStatus);
   } catch (error) {
     console.error(error);
     return response(res, 500, "Internal server error");
@@ -73,12 +79,7 @@ exports.getStatus = async (req, res) => {
       .populate("viewers", "username profilePicture")
       .sort({ createdAt: -1 });
 
-    return response(
-      res,
-      200,
-      "Statuses retrieved successfully",
-      statuses
-    );
+    return response(res, 200, "Statuses retrieved successfully", statuses);
   } catch (error) {
     console.error(error);
     return response(res, 500, "Internal server error");
@@ -104,6 +105,24 @@ exports.viewStatus = async (req, res) => {
       await Status.findById(statusId)
         .populate("user", "username profilePicture")
         .populate("viewers", "username profilePicture");
+      //emit socket event
+      if (req.io && req.socketUserMap) {
+        //broadcast to all connecting users except the creator
+        const statusOwnerSocketId = req.socketUserMap.get(
+          status.user._id.toString(),
+        );
+        if (statusOwnerSocketId) {
+          const viewData = {
+            statusId,
+            viewerId: userId,
+            totalViewers: updateStatus.viewers.lenght,
+            viewers: updateStatus.viewers,
+          };
+          res.io.to(statusOwnerSocketId).emit("status_viewed", viewData);
+        } else {
+          console.log("status owner not connected");
+        }
+      }
     } else {
       console.log("User already viewed the status");
     }
@@ -114,6 +133,8 @@ exports.viewStatus = async (req, res) => {
     return response(res, 500, "Internal server error");
   }
 };
+
+
 
 // ================= DELETE STATUS =================
 exports.deleteStatus = async (req, res) => {
@@ -128,14 +149,19 @@ exports.deleteStatus = async (req, res) => {
     }
 
     if (status.user.toString() !== userId) {
-      return response(
-        res,
-        403,
-        "Not authorized to delete this status"
-      );
+      return response(res, 403, "Not authorized to delete this status");
     }
 
     await status.deleteOne();
+
+    if (req.io && req.socketUserMap) {
+      //broadcast to all connecting users except the creator
+      for (const [connectedId, socketId] of req.socketUserMap) {
+        if (connectedUserId !== userId) {
+          req.io.to(socketId).emit("status_deleted", statusId);
+        }
+      }
+    }
 
     return response(res, 200, "Status deleted successfully");
   } catch (error) {
