@@ -10,7 +10,7 @@ const userUserStore =create(
             clearUser:()=>set({user:null, isAuthenticated:false}),
         }),
         {
-            name:"login-storage",
+            name:"user-storage",
             getStorage: ()=>localStorage
         }
     )
