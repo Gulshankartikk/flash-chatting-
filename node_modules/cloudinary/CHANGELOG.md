@@ -1,3 +1,10 @@
+2.10.0 / 2026-04-25
+==================
+
+  * feat: add last login filtering support to Users API (#725)
+  * chore: updated dependencies (#732)
+  * feat: add debug mode to capture request IDs for support debugging (#731)
+
 2.9.0 / 2026-01-16
 ==================
 
