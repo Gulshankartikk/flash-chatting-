@@ -1,8 +1,11 @@
 {
   "dependencies": {
+    "@hookform/resolvers": "^5.4.0",
     "cloudinary": "^2.9.0",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.0.2",
-    "nodemailer": "^8.0.1"
+    "nodemailer": "^8.0.1",
+    "react-hook-form": "^7.80.0",
+    "yup": "^1.7.1"
   }
 }

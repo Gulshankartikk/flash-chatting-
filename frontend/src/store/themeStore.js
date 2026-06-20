@@ -1,18 +1,19 @@
- import {create } from "zustand";
-import {persist } from "zustand/middleware";
+```js
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
-const useThemeStore =create(
-    persist(
-        (set)=> ({
-            theme:light,
-            setTheme:(theme)=>set({theme}),
-            
-        }),
-        {
-            name:"theme-storage",
-            getStorege: () =>localStorage
-        }
-    )
+const useThemeStore = create(
+  persist(
+    (set) => ({
+      theme: "light",
+      setTheme: (theme) => set({ theme }),
+    }),
+    {
+      name: "theme-storage",
+      storage: () => localStorage,
+    }
+  )
 );
 
-export default useThemeStore
+export default useThemeStore;
+```
