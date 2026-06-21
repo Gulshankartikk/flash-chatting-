@@ -1,26 +1,23 @@
 import React, { useState, useRef, useEffect } from "react";
 import axios from "axios";
+import { useNavigate } from "react-router-dom";
 
 /**
  * FlashChat — Login
  * --------------------------------------------------------------
- * Design notes (see accompanying message for full rationale):
- * - Ink/paper palette instead of generic green-blue gradient
- * - Space Grotesk (display) + Inter (body) pairing
- * - Left "story rail" replaces decorative step dots — it's a real
- *   sequence (phone -> verify -> profile) so structure = information
- * - One orchestrated entrance per step, OTP pop-in, success draw-on
+ * Wired to real stores:
+ * - useUserStore (Zustand + persist) for user/isAuthenticated
+ * - react-router's useNavigate for the post-signup redirect
+ * - step / userPhoneData / theme are still local state here;
+ *   swap useLoginStoreMock / useThemeStoreMock below for your real
+ *   Zustand stores too if you have them, same pattern as useUserStore
  * --------------------------------------------------------------
- * Wiring notes for your real app:
- * - Swap MOCK_MODE to false and point API_BASE at your server
- * - axios calls are written inline (commented) where MOCK_MODE branches
- * - Replace useUserStore / useLoginStore / useThemeStore mocks below
- *   with your actual Zustand stores — same method names are used so
- *   this drops back into your codebase with minimal changes
  */
 
+import useUserStore from "../../store/useUserStore";
+
 // ---------------------------------------------------------------
-// Mock stores (replace with your real Zustand stores in production)
+// Mock stores (replace with your real Zustand stores if/when you have them)
 // ---------------------------------------------------------------
 function useLoginStoreMock() {
   const [step, setStep] = useState(1);
@@ -35,14 +32,6 @@ function useLoginStoreMock() {
 function useThemeStoreMock() {
   const [theme, setTheme] = useState("dark");
   return { theme, setTheme };
-}
-
-function useUserStoreMock() {
-  const [user, setUserState] = useState(null);
-  const [token, setTokenState] = useState(null);
-  const setUser = (u) => setUserState(u);
-  const setToken = (t) => setTokenState(t);
-  return { user, token, setUser, setToken };
 }
 
 const MOCK_MODE = false;
@@ -111,10 +100,14 @@ const Icon = ({ name, className = "w-5 h-5" }) => {
 // Main component
 // ---------------------------------------------------------------
 export default function Login() {
+  const navigate = useNavigate();
+
   const { step, setStep, userPhoneData, setUserPhoneData, resetLoginState } =
     useLoginStoreMock();
   const { theme, setTheme } = useThemeStoreMock();
-  const { setUser, setToken } = useUserStoreMock();
+
+  // Real user store (persisted) — replaces useUserStoreMock
+  const setUser = useUserStore((state) => state.setUser);
 
   const dark = theme === "dark";
   const toggleTheme = () => setTheme(dark ? "light" : "dark");
@@ -370,19 +363,20 @@ export default function Login() {
         formData.append("profilePicture", selectedAvatar);
       }
 
+      let updatedUser;
+
       if (MOCK_MODE) {
         // simulate upload progress for the multipart request
         for (let p = 20; p <= 100; p += 20) {
           await new Promise((r) => setTimeout(r, 150));
           setUploadProgress(p);
         }
-        setUser({
+        updatedUser = {
           username: username.trim(),
           profilePicture: profilePicture || selectedAvatar,
           phoneNumber: userPhoneData?.phoneNumber,
           email: userPhoneData?.email,
-        });
-        setToken("mock-jwt-token");
+        };
       } else {
         // withCredentials is required: updateProfile reads req.user.userId
         // from auth middleware, which depends on the auth_token cookie
@@ -397,14 +391,17 @@ export default function Login() {
         // updateProfile returns the updated user in the response body —
         // exact nesting depends on your responseHandler util, so this
         // checks the common shapes defensively instead of assuming one.
-        const updatedUser = res.data?.data ?? res.data?.user ?? res.data;
-        setUser(updatedUser);
+        updatedUser = res.data?.data ?? res.data?.user ?? res.data;
       }
+
+      // Write into the REAL user store (persisted to localStorage).
+      // This is what the rest of the app checks for isAuthenticated.
+      setUser(updatedUser);
 
       setSuccess(true);
       setTimeout(() => {
         resetLoginState();
-        // navigate("/"); // react-router navigate goes here
+        navigate("/"); // <-- was commented out before; this is the actual redirect
       }, 1800);
     } catch (err) {
       setError(err?.response?.data?.message || "Couldn't create your profile. Try again.");
