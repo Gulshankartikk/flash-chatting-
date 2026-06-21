@@ -12,8 +12,11 @@ const useLoginStore = create(
     }),
     {
       name: "login-storage",
+      // Only persist userPhoneData (handy if the page refreshes mid-OTP).
+      // `step` is intentionally excluded so every fresh load always starts
+      // at step 1 (the phone/email tabs) instead of resuming wherever the
+      // user left off, which was skipping the tab screen entirely.
       partialize: (state) => ({
-        step: state.step,
         userPhoneData: state.userPhoneData,
       }),
     }
