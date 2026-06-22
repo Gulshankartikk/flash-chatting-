@@ -1,6 +1,9 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import useLayoutStore from "../../store/useLayoutStore";
 import useThemeStore from "../../store/useThemeStore";
+import useChatStore from "../../store/chatStore";
+import useUserStore from "../../store/useUserStore";
+import { getAllUser } from "../../services/user.service";
 
 const ChatList = () => {
   const { theme } = useThemeStore();
@@ -9,20 +12,112 @@ const ChatList = () => {
   const selectedContact = useLayoutStore((state) => state.selectedContact);
   const setSelectedContact = useLayoutStore((state) => state.setSelectedContact);
 
+  const conversations = useChatStore((state) => state.conversations);
+  const fetchConversations = useChatStore((state) => state.fetchConversations);
+  const isLoadingConversations = useChatStore((state) => state.isLoadingConversations);
+  const openConversation = useChatStore((state) => state.openConversation);
+
+  const currentUser = useUserStore((state) => state.user);
+
+  const [allUsers, setAllUsers] = useState([]);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(true);
   const [search, setSearch] = useState("");
 
-  // TODO: replace with real data from your store/API
-  const contacts = [
-    { _id: "1", name: "Rahul", lastMessage: "Hello", isOnline: true, unread: 2 },
-    { _id: "2", name: "Aman", lastMessage: "How are you?", isOnline: false, unread: 0 },
-    { _id: "3", name: "Priya", lastMessage: "Good Morning", isOnline: true, unread: 0 },
-  ];
+  // Load real conversations (existing chats) on mount
+  useEffect(() => {
+    fetchConversations();
+  }, [fetchConversations]);
 
-  const filteredContacts = useMemo(() => {
+  // Load real users (everyone you could start a chat with)
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        const res = await getAllUser();
+        const users = res?.data || res || [];
+        if (isMounted) setAllUsers(users);
+      } catch (err) {
+        console.error("Failed to load users:", err);
+      } finally {
+        if (isMounted) setIsLoadingUsers(false);
+      }
+    })();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Build a single list: conversations you already have, PLUS users you
+  // haven't messaged yet (so they show up as "tap to start chatting").
+  const items = useMemo(() => {
+    const fromConversations = conversations.map((conv) => {
+      const other = conv.participants?.find(
+        (p) => String(p._id) !== String(currentUser?._id)
+      );
+      return {
+        _id: conv._id,                 // real conversation id
+        conversationId: conv._id,
+        otherUser: other || null,
+        name: other?.username || other?.name || "Unknown",
+        profilePic: other?.profilePicture || "",
+        isOnline: other?.isOnline || false,
+        lastMessage: conv.lastMessage?.content || "",
+        unread: conv.unreadCount || 0,
+        isDraft: false,
+      };
+    });
+
+    const messagedUserIds = new Set(
+      fromConversations.map((c) => String(c.otherUser?._id))
+    );
+
+    const fromUsersOnly = allUsers
+      .filter((u) => String(u._id) !== String(currentUser?._id))
+      .filter((u) => !messagedUserIds.has(String(u._id)))
+      .map((u) => ({
+        _id: u._id,                    // real user id (no conversation yet)
+        conversationId: null,
+        otherUser: u,
+        name: u.username || u.name || "Unknown",
+        profilePic: u.profilePicture || "",
+        isOnline: u.isOnline || false,
+        lastMessage: "Tap to start chatting",
+        unread: 0,
+        isDraft: true,
+      }));
+
+    return [...fromConversations, ...fromUsersOnly];
+  }, [conversations, allUsers, currentUser]);
+
+  const filteredItems = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return contacts;
-    return contacts.filter((c) => c.name.toLowerCase().includes(q));
-  }, [search]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!q) return items;
+    return items.filter((c) => c.name.toLowerCase().includes(q));
+  }, [search, items]);
+
+  const handleSelect = (item) => {
+    setSelectedContact(item);
+
+    if (item.isDraft) {
+      // No conversation yet — open a local draft. The real conversation
+      // is created lazily by the backend on the first sendMessage() call.
+      openConversation({
+        _id: `draft_${item.otherUser._id}`,
+        isDraft: true,
+        participants: [item.otherUser],
+        otherUser: item.otherUser,
+        lastMessage: null,
+        updatedAt: new Date().toISOString(),
+      });
+    } else {
+      // Real conversation already exists — open it normally,
+      // which will fetch its message history from the backend.
+      const realConv = conversations.find((c) => c._id === item.conversationId);
+      if (realConv) openConversation(realConv);
+    }
+  };
+
+  const isLoading = isLoadingConversations || isLoadingUsers;
 
   return (
     <div
@@ -53,19 +148,21 @@ const ChatList = () => {
       </div>
 
       {/* List */}
-      {filteredContacts.length === 0 ? (
+      {isLoading ? (
+        <p className="text-center text-sm opacity-60 mt-8">Loading…</p>
+      ) : filteredItems.length === 0 ? (
         <p className="text-center text-sm opacity-60 mt-8">No chats found</p>
       ) : (
-        filteredContacts.map((contact) => {
+        filteredItems.map((contact) => {
           const isSelected = selectedContact?._id === contact._id;
 
           return (
             <div
               key={contact._id}
-              onClick={() => setSelectedContact(contact)}
+              onClick={() => handleSelect(contact)}
               role="button"
               tabIndex={0}
-              onKeyDown={(e) => e.key === "Enter" && setSelectedContact(contact)}
+              onKeyDown={(e) => e.key === "Enter" && handleSelect(contact)}
               className={`flex items-center gap-3 p-3 cursor-pointer border-b transition-colors ${
                 isDark ? "border-gray-700" : "border-gray-100"
               } ${
@@ -80,13 +177,21 @@ const ChatList = () => {
             >
               {/* Avatar */}
               <div className="relative flex-shrink-0">
-                <div
-                  className={`w-11 h-11 rounded-full flex items-center justify-center font-medium text-sm ${
-                    isDark ? "bg-gray-700 text-gray-200" : "bg-gray-200 text-gray-700"
-                  }`}
-                >
-                  {contact.name.charAt(0).toUpperCase()}
-                </div>
+                {contact.profilePic ? (
+                  <img
+                    src={contact.profilePic}
+                    alt={contact.name}
+                    className="w-11 h-11 rounded-full object-cover"
+                  />
+                ) : (
+                  <div
+                    className={`w-11 h-11 rounded-full flex items-center justify-center font-medium text-sm ${
+                      isDark ? "bg-gray-700 text-gray-200" : "bg-gray-200 text-gray-700"
+                    }`}
+                  >
+                    {contact.name.charAt(0).toUpperCase()}
+                  </div>
+                )}
                 {contact.isOnline && (
                   <span
                     className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-green-500 border-2 ${

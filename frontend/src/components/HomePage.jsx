@@ -1,46 +1,143 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, MoreVertical, MessageSquarePlus } from "lucide-react";
-
+import {
+  Search,
+  MoreVertical,
+  MessageSquarePlus,
+  X,
+  Check,
+  CheckCheck,
+  LogOut,
+  Settings as SettingsIcon,
+  Users as UsersIcon,
+  Bell,
+} from "lucide-react";
+import useChatStore from "../store/chatStore";
+import useUserStore from "../store/useUserStore";
 import useLayoutStore from "../store/useLayoutStore";
-import useThemeStore from "../store/useThemeStore";
-
-/**
- * HomePage — chat list
- * --------------------------------------------------------------
- * Visual language matches Login.jsx and ChatWindow.jsx: ink/paper
- * palette, Space Grotesk for headers/names, Inter for body text,
- * green accent. Signature touch: contact rows feel like entries in
- * a paper address book — soft hairline dividers, a quiet "last
- * message" preview, and an unread chip instead of a bare dot.
- * --------------------------------------------------------------
- * Wiring notes:
- * - `contacts` comes from useLayoutStore (sample data for now —
- *   see useLayoutStore.js to swap in real backend data).
- * - Search is local/client-side filtering for now.
- * - `unreadCount` and `lastMessageTime` are optional fields on each
- *   contact; the UI degrades gracefully if they're missing.
- */
+import useNotifications from "../hooks/useNotifications";
+import NotificationPanel from "./notifications/NotificationPanel";
+import { getAllUser } from "../services/user.service";
+import StatusDot from "./status/StatusDot";
 
 const HomePage = () => {
-  const contacts = useLayoutStore((state) => state.contacts);
-  const setSelectedContact = useLayoutStore((state) => state.setSelectedContact);
-  const { theme } = useThemeStore();
-  const dark = theme === "dark";
+  // ── Chat store ──────────────────────────────
+  const conversations      = useChatStore((s) => s.conversations);
+  const fetchConversations = useChatStore((s) => s.fetchConversations);
+  const openConversation   = useChatStore((s) => s.openConversation);
+  const activeConversation = useChatStore((s) => s.activeConversation);
+  const createConversation = useChatStore((s) => s.createConversation);
+  const unreadCounts       = useChatStore((s) => s.unreadCounts);
+  const isLoading          = useChatStore((s) => s.isLoadingConversations);
+
+  // ── Layout store ──────────────────
+  const activeView    = useLayoutStore((s) => s.activeView);
+  const setActiveView = useLayoutStore((s) => s.setActiveView);
+  const contacts       = useLayoutStore((s) => s.contacts);
+  const setContacts    = useLayoutStore((s) => s.setContacts);
+
+  // ── Current logged-in user ──────────────────
+  const currentUser = useUserStore((s) => s.user);
+  const logout      = useUserStore((s) => s.logout);
+
+  // ── Notifications hook ──────────────────
+  const {
+    notifications,
+    unreadCount: notifUnread,
+    markAllAsRead,
+    clearNotification,
+  } = useNotifications();
 
   const [query, setQuery] = useState("");
+  const [, setIsLoadingContacts] = useState(false);
+  const [startingChatId, setStartingChatId] = useState(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [notifPanelOpen, setNotifPanelOpen] = useState(false);
+  const menuRef = useRef(null);
 
-  // ---- Theme tokens (mirrors Login.jsx / ChatWindow.jsx) ----
-  const ink = dark ? "#F2F0E9" : "#16221F";
-  const sub = dark ? "#9FB3AC" : "#5C6B66";
-  const accent = "#1FAE5C";
-  const border = dark ? "rgba(242,240,233,0.08)" : "rgba(22,34,31,0.08)";
-  const panelBg = dark ? "#0B1F1C" : "#F2EFE7";
-  const headerBg = dark ? "#13302B" : "#FDFBF6";
-  const inputBg = dark ? "#0E2622" : "#FFFFFF";
-  const rowHoverBg = dark ? "rgba(242,240,233,0.05)" : "rgba(22,34,31,0.035)";
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDocClick = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [menuOpen]);
 
-  const filteredContacts = (contacts || []).filter((c) =>
+  useEffect(() => {
+    fetchConversations();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const loadUsers = async () => {
+      setIsLoadingContacts(true);
+      try {
+        const res = await getAllUser();
+        const users = res?.data || [];
+        const mapped = users.map((u) => ({
+          _id:          u._id,
+          name:         u.username || "Unknown",
+          profilePic:   u.profilePicture || "",
+          isOnline:     u.isOnline || false,
+          phone:        u.phoneSuffix && u.phoneNumber ? `${u.phoneSuffix} ${u.phoneNumber}` : "",
+          conversation: u.conversation || null,
+        }));
+        setContacts(mapped);
+      } catch (err) {
+        console.error("Failed to load contacts:", err);
+      } finally {
+        setIsLoadingContacts(false);
+      }
+    };
+    loadUsers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const chatRows = conversations.map((conv) => {
+    const other = conv.participants?.find(
+      (p) => p._id !== currentUser?._id
+    );
+    return {
+      _id:             conv._id,
+      name:            other?.username || other?.name || "Unknown",
+      profilePic:      other?.profilePicture || "",
+      isOnline:        other?.isOnline || false,
+      lastMessage:     conv.lastMessage?.content || conv.lastMessage?.message || "",
+      lastMessageTime: conv.updatedAt,
+      lastMessageMine: conv.lastMessage?.sender === currentUser?._id || conv.lastMessage?.sender?._id === currentUser?._id,
+      lastMessageStatus: conv.lastMessage?.messageStatus || conv.lastMessage?.status || null,
+      unreadCount:     unreadCounts[conv._id] || 0,
+      _conv:           conv,
+    };
+  });
+
+  const handleChatClick = (contact) => {
+    openConversation(contact._conv);
+  };
+
+  const handleStartChat = async (contact) => {
+    if (startingChatId) return;
+    setStartingChatId(contact._id);
+    try {
+      if (contact.conversation) {
+        openConversation(contact.conversation);
+      } else {
+        await createConversation(contact._id);
+      }
+      setActiveView("chats");
+    } catch (err) {
+      console.error("Failed to start conversation:", err);
+    } finally {
+      setStartingChatId(null);
+    }
+  };
+
+  const isContactsView = activeView === "contacts";
+  const baseRows = isContactsView ? contacts : chatRows;
+  const filteredRows = baseRows.filter((c) =>
     c.name?.toLowerCase().includes(query.toLowerCase())
   );
 
@@ -49,236 +146,207 @@ const HomePage = () => {
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return "";
     const today = new Date();
-    const isToday = date.toDateString() === today.toDateString();
-    return isToday
+    return date.toDateString() === today.toDateString()
       ? date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
       : date.toLocaleDateString([], { month: "short", day: "numeric" });
   };
 
-  return (
-    <div
-      style={{
-        height: "100%",
-        display: "flex",
-        flexDirection: "column",
-        background: panelBg,
-        color: ink,
-        fontFamily: "Inter, sans-serif",
-      }}
-    >
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap');
-        .hp-display { font-family: 'Space Grotesk', sans-serif; }
-        .hp-row { transition: background 0.12s ease; }
-        .hp-row:hover { background: ${rowHoverBg}; }
-        .hp-icon-btn { background: none; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; border-radius: 8px; padding: 7px; transition: background 0.12s ease; color: inherit; }
-        .hp-icon-btn:hover { background: ${dark ? "rgba(242,240,233,0.08)" : "rgba(22,34,31,0.06)"}; }
-        .hp-search:focus { outline: none; box-shadow: 0 0 0 3px rgba(31,174,92,0.18); }
-        .hp-fade-in { animation: hpFadeIn 0.25s ease both; }
-        @keyframes hpFadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
-        @media (prefers-reduced-motion: reduce) {
-          .hp-fade-in { animation: none !important; }
-        }
-      `}</style>
+  const StatusTick = ({ status }) => {
+    if (!status) return null;
+    if (status === "sent") return <Check size={13} className="text-[#9090B0] flex-shrink-0" />;
+    if (status === "delivered") return <CheckCheck size={13} className="text-[#9090B0] flex-shrink-0" />;
+    if (status === "seen" || status === "read") return <CheckCheck size={13} className="text-[#00D4FF] flex-shrink-0" />;
+    return null;
+  };
 
+  return (
+    <div className="h-full flex flex-col bg-white dark:bg-[#0A0A0F] text-slate-800 dark:text-[#F0F0FF] font-sans relative">
       {/* Header */}
-      <div
-        style={{
-          flexShrink: 0,
-          background: headerBg,
-          borderBottom: `1px solid ${border}`,
-          padding: "16px 18px 14px",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-          <h1 className="hp-display" style={{ fontSize: 22, fontWeight: 700, margin: 0, letterSpacing: -0.4 }}>
-            Chats
+      <div className="flex-shrink-0 bg-slate-50 dark:bg-[#111118] border-b border-slate-200 dark:border-[#2A2A3D] p-4 sticky top-0 z-10">
+        <div className="flex items-center justify-between mb-3">
+          <h1 className="text-xl font-bold tracking-tight text-slate-800 dark:text-[#F0F0FF]">
+            {isContactsView ? "Select contact" : "Flash Chat"}
           </h1>
-          <div style={{ display: "flex", gap: 2 }}>
-            <button className="hp-icon-btn" aria-label="Start a new chat">
-              <MessageSquarePlus size={20} />
+          <div className="flex items-center gap-1.5">
+            {/* Bell Notification Trigger */}
+            <button
+              onClick={() => setNotifPanelOpen(!notifPanelOpen)}
+              className="p-2 hover:bg-slate-100 dark:hover:bg-[#1A1A26] rounded-full text-slate-400 dark:text-[#9090B0] hover:text-[#FF6584] transition-colors relative"
+              title="Notifications"
+            >
+              <Bell size={18} />
+              {notifUnread > 0 && (
+                <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-[#FF6584] rounded-full animate-pulse border-2 border-white dark:border-[#111118]" />
+              )}
             </button>
-            <button className="hp-icon-btn" aria-label="More options">
-              <MoreVertical size={20} />
+
+            <button
+              className="p-2 hover:bg-slate-100 dark:hover:bg-[#1A1A26] rounded-full text-slate-400 dark:text-[#9090B0] hover:text-slate-800 dark:hover:text-[#F0F0FF] transition-colors"
+              onClick={() => setActiveView(isContactsView ? "chats" : "contacts")}
+              title={isContactsView ? "Back to chats" : "New chat"}
+            >
+              <MessageSquarePlus size={18} />
             </button>
+
+            <div className="relative" ref={menuRef}>
+              <button
+                className="p-2 hover:bg-slate-100 dark:hover:bg-[#1A1A26] rounded-full text-slate-400 dark:text-[#9090B0] hover:text-slate-800 dark:hover:text-[#F0F0FF] transition-colors"
+                onClick={() => setMenuOpen(!menuOpen)}
+              >
+                <MoreVertical size={18} />
+              </button>
+
+              {menuOpen && (
+                <div className="absolute right-0 top-full mt-1.5 bg-white dark:bg-[#1A1A26] border border-slate-200 dark:border-[#2A2A3D] rounded-xl shadow-2xl py-1 w-44 z-20 text-left">
+                  <button
+                    className="flex items-center gap-2 px-3 py-2 text-xs text-slate-700 dark:text-[#F0F0FF] hover:bg-slate-100 dark:hover:bg-[#2A2A3D] transition-colors w-full"
+                    onClick={() => { setActiveView("contacts"); setMenuOpen(false); }}
+                  >
+                    <UsersIcon size={14} /> New Group
+                  </button>
+                  <button
+                    className="flex items-center gap-2 px-3 py-2 text-xs text-slate-700 dark:text-[#F0F0FF] hover:bg-slate-100 dark:hover:bg-[#2A2A3D] transition-colors w-full"
+                    onClick={() => { setActiveView("settings"); setMenuOpen(false); }}
+                  >
+                    <SettingsIcon size={14} /> Settings
+                  </button>
+                  <button
+                    className="flex items-center gap-2 px-3 py-2 text-xs text-[#FF3D71] hover:bg-slate-100 dark:hover:bg-[#2A2A3D] transition-colors w-full"
+                    onClick={() => { setMenuOpen(false); logout && logout(); }}
+                  >
+                    <LogOut size={14} /> Log out
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
         {/* Search */}
-        <div style={{ position: "relative" }}>
-          <Search
-            size={16}
-            style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: sub }}
-          />
+        <div className="relative">
+          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-[#4A4A6A]" />
           <input
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search conversations"
-            className="hp-search"
-            style={{
-              width: "100%",
-              padding: "9px 12px 9px 34px",
-              borderRadius: 10,
-              border: "none",
-              background: inputBg,
-              color: ink,
-              fontSize: 13.5,
-              fontFamily: "Inter, sans-serif",
-            }}
+            placeholder={isContactsView ? "Search contacts..." : "Search conversations..."}
+            className="w-full pl-9 pr-8 py-2 bg-white dark:bg-[#1A1A26] border border-slate-200 dark:border-[#2A2A3D] focus:border-[#6C63FF] rounded-xl text-xs text-slate-800 dark:text-[#F0F0FF] placeholder-slate-400 dark:placeholder-[#4A4A6A] focus:outline-none transition-colors"
           />
+          {query && (
+            <button
+              onClick={() => setQuery("")}
+              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#9090B0] hover:text-slate-800 dark:hover:text-[#F0F0FF]"
+            >
+              <X size={14} />
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Contact list */}
-      <div style={{ flex: 1, overflowY: "auto" }}>
-        {!contacts || contacts.length === 0 ? (
-          <EmptyState ink={ink} sub={sub} accent={accent} message="No contacts yet. Start a conversation to see it here." />
-        ) : filteredContacts.length === 0 ? (
-          <EmptyState ink={ink} sub={sub} accent={accent} message={`No results for "${query}"`} />
+      {/* List Body */}
+      <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-[#2A2A3D]">
+        {isLoading ? (
+          <div className="flex justify-center py-10">
+            <div className="w-6 h-6 border-2 border-[#6C63FF] border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : filteredRows.length === 0 ? (
+          <div className="py-20 text-center text-slate-400 dark:text-[#9090B0]">
+            <p className="text-xs">
+              {isContactsView ? "No contacts found" : "No conversations yet. Start a new chat!"}
+            </p>
+          </div>
         ) : (
           <AnimatePresence initial={false}>
-            {filteredContacts.map((contact, index) => (
-              <motion.div
-                key={contact._id}
-                layout
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                whileHover={{ scale: 1.0 }}
-                whileTap={{ scale: 0.985 }}
-                onClick={() => setSelectedContact(contact)}
-                className="hp-row"
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 12,
-                  padding: "12px 18px",
-                  cursor: "pointer",
-                  borderBottom: index < filteredContacts.length - 1 ? `1px solid ${border}` : "none",
-                }}
-              >
-                {/* Avatar */}
-                <div style={{ position: "relative", flexShrink: 0 }}>
-                  <img
-                    src={
-                      contact.profilePic ||
-                      `https://ui-avatars.com/api/?name=${encodeURIComponent(contact.name)}&background=1FAE5C&color=fff`
-                    }
-                    alt={contact.name}
-                    style={{ width: 48, height: 48, borderRadius: "50%", objectFit: "cover" }}
-                  />
-                  {contact.isOnline && (
-                    <span
-                      style={{
-                        position: "absolute",
-                        bottom: -1,
-                        right: -1,
-                        width: 12,
-                        height: 12,
-                        borderRadius: "50%",
-                        background: accent,
-                        border: `2px solid ${panelBg}`,
-                      }}
-                    />
-                  )}
-                </div>
-
-                {/* Name + preview */}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
-                    <h3
-                      className="hp-display"
-                      style={{
-                        fontSize: 15,
-                        fontWeight: 600,
-                        margin: 0,
-                        letterSpacing: -0.1,
-                        whiteSpace: "nowrap",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                      }}
-                    >
-                      {contact.name}
-                    </h3>
-                    {contact.lastMessageTime && (
-                      <span style={{ fontSize: 11, color: sub, flexShrink: 0 }}>
-                        {formatPreviewTime(contact.lastMessageTime)}
-                      </span>
+            {filteredRows.map((row) => {
+              const isSelected = activeConversation?._id === row._conv?._id || activeConversation?._id === row._id;
+              return (
+                <motion.div
+                  key={row._id}
+                  layout
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() =>
+                    isContactsView ? handleStartChat(row) : handleChatClick(row)
+                  }
+                  className={`flex items-center gap-3.5 px-4 py-3.5 cursor-pointer transition-all border-b border-slate-100 dark:border-[#2A2A3D] ${
+                    isSelected
+                      ? "bg-slate-100/70 dark:bg-[#1A1A26] border-l-4 border-[#6C63FF]"
+                      : "hover:bg-slate-50/50 dark:hover:bg-[#111118]/60"
+                  }`}
+                >
+                  {/* Avatar & Status dot */}
+                  <div className="relative flex-shrink-0">
+                    {row.profilePic ? (
+                      <img
+                        src={row.profilePic}
+                        alt=""
+                        className="w-11 h-11 rounded-full object-cover border border-slate-200 dark:border-[#2A2A3D]"
+                      />
+                    ) : (
+                      <div className="w-11 h-11 rounded-full bg-slate-100 dark:bg-[#1A1A26] border border-slate-200 dark:border-[#2A2A3D] text-slate-700 dark:text-[#F0F0FF] flex items-center justify-center font-bold text-sm">
+                        {row.name.charAt(0).toUpperCase()}
+                      </div>
                     )}
+                    <div className="absolute bottom-0 right-0">
+                      <StatusDot isOnline={row.isOnline} size={10} />
+                    </div>
                   </div>
-                  <p
-                    style={{
-                      fontSize: 13,
-                      color: sub,
-                      margin: "2px 0 0",
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                    }}
-                  >
-                    {contact.lastMessage || "Start a conversation"}
-                  </p>
-                </div>
 
-                {/* Unread chip */}
-                {contact.unreadCount > 0 && (
-                  <span
-                    style={{
-                      flexShrink: 0,
-                      minWidth: 20,
-                      height: 20,
-                      borderRadius: 10,
-                      background: accent,
-                      color: "#0B1F1C",
-                      fontSize: 11,
-                      fontWeight: 700,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      padding: "0 6px",
-                    }}
-                  >
-                    {contact.unreadCount > 99 ? "99+" : contact.unreadCount}
-                  </span>
-                )}
-              </motion.div>
-            ))}
+                  {/* Detail */}
+                  <div className="flex-1 text-left min-w-0">
+                    <div className="flex justify-between items-baseline gap-1">
+                      <h4 className="text-sm font-semibold text-slate-800 dark:text-[#F0F0FF] truncate">
+                        {row.name}
+                      </h4>
+                      {!isContactsView && row.lastMessageTime && (
+                        <span className="text-[10px] text-slate-400 dark:text-[#9090B0]">
+                          {formatPreviewTime(row.lastMessageTime)}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 mt-0.5">
+                      {!isContactsView && row.lastMessageMine && (
+                        <StatusTick status={row.lastMessageStatus} />
+                      )}
+                      <p className="text-xs text-slate-400 dark:text-[#9090B0] truncate flex-1">
+                        {isContactsView ? "Tap to start chatting" : row.lastMessage}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Badge */}
+                  {!isContactsView && row.unreadCount > 0 && (
+                    <span className="flex-shrink-0 min-w-[18px] h-[18px] rounded-full bg-[#FF6584] text-white text-[9px] font-bold flex items-center justify-center px-1 shadow-lg shadow-[#FF6584]/20 animate-pulse">
+                      {row.unreadCount > 99 ? "99+" : row.unreadCount}
+                    </span>
+                  )}
+                </motion.div>
+              );
+            })}
           </AnimatePresence>
         )}
       </div>
+
+      {/* Floating Action Button */}
+      <button
+        onClick={() => setActiveView(isContactsView ? "chats" : "contacts")}
+        className="absolute bottom-4 right-4 w-12 h-12 bg-[#6C63FF] hover:bg-[#5b52e6] text-white rounded-full shadow-2xl transition-transform hover:scale-105 active:scale-95 flex items-center justify-center z-10"
+        title={isContactsView ? "Back to chats" : "Start a new chat"}
+      >
+        <MessageSquarePlus size={20} />
+      </button>
+
+      {/* Side Slide-in Notification Panel */}
+      <NotificationPanel
+        isOpen={notifPanelOpen}
+        onClose={() => setNotifPanelOpen(false)}
+        notifications={notifications}
+        onMarkAllAsRead={markAllAsRead}
+        onClearNotification={clearNotification}
+      />
     </div>
   );
 };
-
-// Shared empty-state block — used both for "no contacts at all" and
-// "search produced no matches", just with a different message.
-const EmptyState = ({ ink, sub, accent, message }) => (
-  <div
-    className="hp-fade-in"
-    style={{
-      height: "100%",
-      minHeight: 280,
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 10,
-      padding: "0 24px",
-      textAlign: "center",
-    }}
-  >
-    <svg width="36" height="36" viewBox="0 0 24 24" fill="none">
-      <path
-        d="M4 5h16v10H9l-4 4v-4H4V5Z"
-        stroke={sub}
-        strokeWidth="1.6"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
-    </svg>
-    <p style={{ fontSize: 13.5, color: sub, margin: 0, maxWidth: 220 }}>{message}</p>
-  </div>
-);
 
 export default HomePage;

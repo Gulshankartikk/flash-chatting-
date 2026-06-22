@@ -1,27 +1,9 @@
 import React, { useEffect, useState } from "react";
-
 import { AnimatePresence, motion } from "framer-motion";
-import { useLocation } from "react-router-dom";
-
 import Sidebar from "./Sidebar";
-import ChatWindow from "./ChatWindow";
-
+import ChatWindow from "../pages/chatSection/ChatWindow";
 import useLayoutStore from "../store/useLayoutStore";
 import useThemeStore from "../store/useThemeStore";
-
-/**
- * Layout — app shell
- * --------------------------------------------------------------
- * Visual language matches Login.jsx / ChatWindow.jsx / HomePage.jsx:
- * ink/paper palette, Space Grotesk for dialog headers, Inter for
- * body text, green accent. This file owns the overall page
- * background and the two overlay dialogs (theme settings, status
- * preview) — the chat list / chat window panels keep their own
- * styling from HomePage.jsx and ChatWindow.jsx.
- * --------------------------------------------------------------
- * Note: Sidebar.jsx still uses its previous styling — only this
- * shell and its dialogs were restyled, by request.
- */
 
 const Layout = ({
   children,
@@ -33,67 +15,28 @@ const Layout = ({
   const selectedContact = useLayoutStore((state) => state.selectedContact);
   const setSelectedContact = useLayoutStore((state) => state.setSelectedContact);
 
-  const location = useLocation();
-
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   const { theme, setTheme } = useThemeStore();
-  const dark = theme === "dark";
 
   useEffect(() => {
     const handleResize = () => {
       setIsMobile(window.innerWidth < 768);
     };
-
     window.addEventListener("resize", handleResize);
-
-    return () => {
-      window.removeEventListener("resize", handleResize);
-    };
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // ---- Theme tokens (mirrors Login.jsx / ChatWindow.jsx / HomePage.jsx) ----
-  const ink = dark ? "#F2F0E9" : "#16221F";
-  const sub = dark ? "#9FB3AC" : "#5C6B66";
-  const accent = "#1FAE5C";
-  const border = dark ? "rgba(242,240,233,0.10)" : "rgba(22,34,31,0.10)";
-  const panelBg = dark ? "#0B1F1C" : "#F2EFE7";
-  const dialogBg = dark ? "#13302B" : "#FDFBF6";
-
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        position: "relative",
-        background: panelBg,
-        color: ink,
-        fontFamily: "Inter, sans-serif",
-      }}
-    >
+    <div className="min-h-screen flex relative bg-slate-50 dark:bg-[#0A0A0F] text-slate-800 dark:text-[#F0F0FF] font-sans">
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap');
-        .lo-display { font-family: 'Space Grotesk', sans-serif; }
-        .lo-fade-in { animation: loFadeIn 0.2s ease both; }
-        @keyframes loFadeIn { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
         .lo-theme-option { transition: background 0.12s ease, border-color 0.12s ease; }
-        .lo-theme-option:hover { filter: brightness(1.05); }
-        .lo-close-btn:hover { filter: brightness(1.08); }
-        @media (prefers-reduced-motion: reduce) {
-          .lo-fade-in { animation: none !important; }
-        }
+        .lo-theme-option:hover { filter: brightness(1.15); }
       `}</style>
 
       {!isMobile && <Sidebar />}
 
-      <div
-        style={{
-          flex: 1,
-          display: "flex",
-          flexDirection: isMobile ? "column" : "row",
-          overflow: "hidden",
-        }}
-      >
+      <div className="flex-1 flex overflow-hidden flex-col md:flex-row">
         <AnimatePresence initial={false}>
           {(!selectedContact || !isMobile) && (
             <motion.div
@@ -102,11 +45,9 @@ const Layout = ({
               animate={{ x: 0 }}
               exit={{ x: "-100%" }}
               transition={{ type: "tween" }}
+              className="w-full md:w-[400px] h-full flex flex-col flex-shrink-0 border-r border-slate-200 dark:border-[#2A2A3D] bg-white dark:bg-[#0A0A0F]"
               style={{
-                width: isMobile ? "100%" : "40%",
-                height: "100%",
-                paddingBottom: isMobile ? 64 : 0,
-                borderRight: !isMobile ? `1px solid ${border}` : "none",
+                paddingBottom: isMobile ? "64px" : "0px",
               }}
             >
               {children}
@@ -120,7 +61,7 @@ const Layout = ({
               animate={{ x: 0 }}
               exit={{ x: "100%" }}
               transition={{ type: "tween" }}
-              style={{ width: "100%", height: "100%" }}
+              className="flex-1 h-full w-full"
             >
               <ChatWindow
                 selectedContact={selectedContact}
@@ -136,133 +77,48 @@ const Layout = ({
 
       {/* Theme Dialog */}
       {isThemeDialogOpen && (
-        <div
-          className="lo-fade-in"
-          style={{
-            position: "fixed",
-            inset: 0,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: "rgba(11,31,28,0.55)",
-            zIndex: 50,
-            padding: 16,
-          }}
-        >
-          <div
-            style={{
-              background: dialogBg,
-              color: ink,
-              borderRadius: 16,
-              padding: 28,
-              maxWidth: 360,
-              width: "100%",
-              boxShadow: dark
-                ? "0 30px 70px -20px rgba(0,0,0,0.6)"
-                : "0 30px 70px -20px rgba(22,34,31,0.25)",
-            }}
-          >
-            <h2 className="lo-display" style={{ fontSize: 20, fontWeight: 700, margin: "0 0 4px", letterSpacing: -0.3 }}>
-              Appearance
-            </h2>
-            <p style={{ fontSize: 13, color: sub, margin: "0 0 18px" }}>
-              Choose how flashchat looks on this device.
-            </p>
+        <div className="fixed inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm z-50 p-4 animate-fade-in">
+          <div className="bg-white dark:bg-[#1A1A26] border border-slate-200 dark:border-[#2A2A3D] text-slate-800 dark:text-[#F0F0FF] rounded-2xl p-6 max-w-sm w-full shadow-2xl">
+            <h2 className="text-lg font-bold mb-1">Appearance</h2>
+            <p className="text-xs text-slate-400 dark:text-[#9090B0] mb-4">Choose how Flash Chat looks on this device.</p>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <div className="flex flex-col gap-2">
               <button
                 onClick={() => setTheme("light")}
-                className="lo-theme-option"
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: "12px 14px",
-                  borderRadius: 10,
-                  border: `1.5px solid ${theme === "light" ? accent : border}`,
-                  background: theme === "light" ? `${accent}14` : "transparent",
-                  color: ink,
-                  fontSize: 14,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                }}
+                className={`flex items-center justify-between p-3 rounded-xl border text-sm font-semibold cursor-pointer lo-theme-option ${
+                  theme === "light"
+                    ? "border-[#6C63FF] bg-[#6C63FF]/10 text-[#6C63FF]"
+                    : "border-slate-200 dark:border-[#2A2A3D] bg-transparent text-slate-400 dark:text-[#9090B0]"
+                }`}
               >
                 Light
-                {theme === "light" && <Dot color={accent} />}
+                {theme === "light" && <span className="w-2 h-2 rounded-full bg-[#6C63FF]" />}
               </button>
 
               <button
                 onClick={() => setTheme("dark")}
-                className="lo-theme-option"
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: "12px 14px",
-                  borderRadius: 10,
-                  border: `1.5px solid ${theme === "dark" ? accent : border}`,
-                  background: theme === "dark" ? `${accent}14` : "transparent",
-                  color: ink,
-                  fontSize: 14,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                }}
+                className={`flex items-center justify-between p-3 rounded-xl border text-sm font-semibold cursor-pointer lo-theme-option ${
+                  theme === "dark"
+                    ? "border-[#6C63FF] bg-[#6C63FF]/10 text-[#6C63FF]"
+                    : "border-slate-200 dark:border-[#2A2A3D] bg-transparent text-slate-400 dark:text-[#9090B0]"
+                }`}
               >
                 Dark
-                {theme === "dark" && <Dot color={accent} />}
+                {theme === "dark" && <span className="w-2 h-2 rounded-full bg-[#6C63FF]" />}
               </button>
             </div>
 
             <button
               onClick={toggleDialog}
-              className="lo-close-btn"
-              style={{
-                marginTop: 20,
-                width: "100%",
-                padding: "11px 0",
-                borderRadius: 10,
-                border: "none",
-                background: accent,
-                color: "#0B1F1C",
-                fontSize: 14,
-                fontWeight: 700,
-                cursor: "pointer",
-              }}
+              className="mt-5 w-full py-2.5 rounded-xl bg-[#6C63FF] hover:bg-[#5b52e6] text-white text-sm font-bold transition-colors"
             >
               Done
             </button>
           </div>
         </div>
       )}
-
-      {/* Status Preview */}
-      {isStatusPreviewOpen && (
-        <div
-          className="lo-fade-in"
-          style={{
-            position: "fixed",
-            inset: 0,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: "rgba(11,31,28,0.85)",
-            zIndex: 50,
-            padding: 16,
-          }}
-        >
-          <div style={{ maxWidth: 480, width: "100%", padding: 16 }}>
-            {statusPreviewContent}
-          </div>
-        </div>
-      )}
     </div>
   );
 };
-
-// Small filled dot used as a "selected" marker in the theme dialog —
-// quieter than a checkmark icon, reads as an inline status indicator.
-const Dot = ({ color }) => (
-  <span style={{ width: 8, height: 8, borderRadius: "50%", background: color, display: "inline-block" }} />
-);
 
 export default Layout;

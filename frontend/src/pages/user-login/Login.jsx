@@ -14,25 +14,11 @@ import { useNavigate } from "react-router-dom";
  * --------------------------------------------------------------
  */
 
+import useLoginStore from "../../store/useLoginStore";
+import useThemeStore from "../../store/useThemeStore";
 import useUserStore from "../../store/useUserStore";
 
-// ---------------------------------------------------------------
-// Mock stores (replace with your real Zustand stores if/when you have them)
-// ---------------------------------------------------------------
-function useLoginStoreMock() {
-  const [step, setStep] = useState(1);
-  const [userPhoneData, setUserPhoneData] = useState(null);
-  const resetLoginState = () => {
-    setStep(1);
-    setUserPhoneData(null);
-  };
-  return { step, setStep, userPhoneData, setUserPhoneData, resetLoginState };
-}
 
-function useThemeStoreMock() {
-  const [theme, setTheme] = useState("dark");
-  return { theme, setTheme };
-}
 
 const MOCK_MODE = false;
 // eslint-disable-next-line no-unused-vars -- kept for clarity even though API_BASE is used directly below
@@ -103,8 +89,8 @@ export default function Login() {
   const navigate = useNavigate();
 
   const { step, setStep, userPhoneData, setUserPhoneData, resetLoginState } =
-    useLoginStoreMock();
-  const { theme, setTheme } = useThemeStoreMock();
+    useLoginStore();
+  const { theme, setTheme } = useThemeStore();
 
   // Real user store (persisted) — replaces useUserStoreMock
   const setUser = useUserStore((state) => state.setUser);
@@ -300,6 +286,7 @@ export default function Login() {
       } else {
         await axios.post(`${API_BASE}/send-otp`, userPhoneData, { withCredentials: true });
       }
+
       setResendCooldown(30);
       setOtp(["", "", "", "", "", ""]);
       otpRefs.current[0]?.focus();
@@ -688,6 +675,7 @@ export default function Login() {
                         ? `${userPhoneData.phoneSuffix}${userPhoneData.phoneNumber}`
                         : userPhoneData?.email}
                     </strong>
+
                   </>
                 )}
                 {step === 3 && "Pick a name and a face for your account."}
@@ -1179,9 +1167,7 @@ function StepTwo({
         {loading ? "Verifying…" : "Verify and continue"}
       </button>
 
-      <p style={{ textAlign: "center", fontSize: 11.5, color: sub }}>
-        Mock mode: any 6 digits work, except <code>111111</code> (simulates a wrong code).
-      </p>
+
     </form>
   );
 }

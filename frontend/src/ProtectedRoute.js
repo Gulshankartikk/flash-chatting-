@@ -3,7 +3,7 @@ import { Navigate, Outlet, useLocation } from "react-router-dom";
 import axios from "axios";
 import useUserStore from "./store/useUserStore";
 
-const API_BASE = process.env.REACT_APP_API_URL || "http://localhost:8000/api/auth";
+const API_BASE = `${process.env.REACT_APP_API_URL}/api/auth`;
 
 // Calls the backend to verify the auth_token cookie.
 // Returns { isAuthenticated: true, user } on success,
@@ -13,23 +13,34 @@ const checkUserAuth = async () => {
     const res = await axios.get(`${API_BASE}/check-auth`, {
       withCredentials: true, // required so the auth_token cookie is sent
     });
-    const user = res.data?.data ?? res.data?.user ?? res.data;
-    return { isAuthenticated: true, user };
+    const authData = res.data?.data;
+    if (authData && authData.isAuthenticated) {
+      return { isAuthenticated: true, user: authData.user };
+    }
+    return { isAuthenticated: false };
   } catch (error) {
     return { isAuthenticated: false };
   }
 };
 
-export const ProtectedRoute = () => {
-  const location = useLocation();
+// Shared verification hook — both ProtectedRoute and PublicRoute use
+// this, so the session is checked exactly once per route mount and
+// both gates agree on the same fresh result instead of one of them
+// trusting a possibly-stale store value.
+const useAuthCheck = () => {
   const [isChecking, setIsChecking] = useState(true);
-
-  const { isAuthenticated, setUser, clearUser } = useUserStore();
+  const setUser = useUserStore((state) => state.setUser);
+  const clearUser = useUserStore((state) => state.clearUser);
+  const isAuthenticated = useUserStore((state) => state.isAuthenticated);
 
   useEffect(() => {
+    let isMounted = true;
+
     const verifyAuth = async () => {
       try {
         const result = await checkUserAuth();
+        if (!isMounted) return;
+
         if (result?.isAuthenticated) {
           setUser(result.user);
         } else {
@@ -37,13 +48,25 @@ export const ProtectedRoute = () => {
         }
       } catch (error) {
         console.error(error);
-        clearUser();
+        if (isMounted) clearUser();
       } finally {
-        setIsChecking(false);
+        if (isMounted) setIsChecking(false);
       }
     };
+
     verifyAuth();
+
+    return () => {
+      isMounted = false;
+    };
   }, [setUser, clearUser]);
+
+  return { isChecking, isAuthenticated };
+};
+
+export const ProtectedRoute = () => {
+  const location = useLocation();
+  const { isChecking, isAuthenticated } = useAuthCheck();
 
   if (isChecking) {
     return <Loader />;
@@ -58,7 +81,11 @@ export const ProtectedRoute = () => {
 };
 
 export const PublicRoute = () => {
-  const isAuthenticated = useUserStore((state) => state.isAuthenticated);
+  const { isChecking, isAuthenticated } = useAuthCheck();
+
+  if (isChecking) {
+    return <Loader />;
+  }
 
   if (isAuthenticated) {
     return <Navigate to="/" replace />;

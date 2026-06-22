@@ -1,198 +1,163 @@
-import React, { useState, useEffect, useRef } from "react";
-import useLayoutStore from "../store/layoutStore";
-import useThemeStore from "../store/useThemeStore";
-import useUserStore from "../store/useUserStore";
-import useSocket from "../hooks/useSocket"; // adjust path/name as per your setup
+import React, { useState, useContext } from "react";
+import { Search } from "lucide-react";
+import useChatStore from "../../store/chatStore";
+import useUserStore from "../../store/useUserStore";
+import { CallContext } from "../../context/CallContext";
+import ChatHeader from "../../components/chat/ChatHeader";
+import MessageList from "../../components/chat/MessageList";
+import ChatInput from "../../components/chat/ChatInput";
+import TypingIndicator from "../../components/chat/TypingIndicator";
 
-const ChatWindow = () => {
-  const { theme } = useThemeStore();
-  const isDark = theme === "dark";
+const ChatWindow = ({ selectedContact, setSelectedContact, isMobile }) => {
+  const currentUser = useUserStore((s) => s.user);
 
-  const socket = useSocket();
-  const currentUser = useUserStore((state) => state.user);
+  const activeConversation = useChatStore((s) => s.activeConversation);
+  const messages            = useChatStore((s) => s.messages);
+  const isLoadingMessages   = useChatStore((s) => s.isLoadingMessages);
+  const sendMessage         = useChatStore((s) => s.sendMessage);
+  const deleteMessage       = useChatStore((s) => s.deleteMessage);
+  const reactToMessage       = useChatStore((s) => s.reactToMessage);
+  const startTyping         = useChatStore((s) => s.startTyping);
+  const stopTyping          = useChatStore((s) => s.stopTyping);
+  const getTypingUsers      = useChatStore((s) => s.getTypingUsers);
+  const replyTo             = useChatStore((s) => s.replyTo);
+  const setReplyTo          = useChatStore((s) => s.setReplyTo);
+  const clearReplyTo        = useChatStore((s) => s.clearReplyTo);
 
-  const selectedContact = useLayoutStore((state) => state.selectedContact);
-  const setSelectedContact = useLayoutStore((state) => state.setSelectedContact);
+  const { startCall } = useContext(CallContext);
 
-  const [message, setMessage] = useState("");
-  const [isOtherTyping, setIsOtherTyping] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
-  const [messages, setMessages] = useState([
-    { id: 1, text: "Hello 👋", sender: "other" },
-    { id: 2, text: "Hi!", sender: "me" },
-  ]);
+  const otherUser =
+    activeConversation?.participants?.find((p) => p._id !== currentUser?._id) ||
+    selectedContact?.otherUser ||
+    selectedContact;
 
-  const messagesEndRef = useRef(null);
-  const typingTimeoutRef = useRef(null);
+  const otherUserId = otherUser?._id;
 
-  // Auto-scroll to latest message
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isOtherTyping]);
+  const typingUserIds = activeConversation
+    ? getTypingUsers(activeConversation._id)
+    : [];
+  const isOtherTyping = otherUserId ? typingUserIds.includes(otherUserId) : false;
 
-  // Listen for typing events from the selected contact
-  useEffect(() => {
-    if (!socket || !selectedContact) return;
-
-    const handleTyping = ({ senderId, isTyping }) => {
-      if (senderId === selectedContact._id) {
-        setIsOtherTyping(isTyping);
-      }
-    };
-
-    socket.on("typing", handleTyping);
-
-    return () => {
-      socket.off("typing", handleTyping);
-      setIsOtherTyping(false); // reset when switching chats
-    };
-  }, [socket, selectedContact]);
-
-  // Emit typing event when current user types
-  const handleInputChange = (e) => {
-    setMessage(e.target.value);
-
-    if (!socket || !selectedContact) return;
-
-    socket.emit("typing", {
-      senderId: currentUser?._id,
-      receiverId: selectedContact._id,
-      isTyping: true,
+  const handleSend = ({ message, messageType, mediaFile }) => {
+    if (!otherUserId) return;
+    sendMessage({
+      receiverId: otherUserId,
+      message,
+      messageType,
+      mediaFile,
     });
-
-    clearTimeout(typingTimeoutRef.current);
-    typingTimeoutRef.current = setTimeout(() => {
-      socket.emit("typing", {
-        senderId: currentUser?._id,
-        receiverId: selectedContact._id,
-        isTyping: false,
-      });
-    }, 1500); // stop "typing" after 1.5s of inactivity
   };
 
-  const handleSend = () => {
-    if (!message.trim()) return;
-
-    setMessages((prev) => [
-      ...prev,
-      { id: Date.now(), text: message, sender: "me" },
-    ]);
-
-    // tell the other user typing has stopped immediately on send
-    if (socket && selectedContact) {
-      clearTimeout(typingTimeoutRef.current);
-      socket.emit("typing", {
-        senderId: currentUser?._id,
-        receiverId: selectedContact._id,
-        isTyping: false,
-      });
-    }
-
-    setMessage("");
+  const handleDelete = (msg, deleteFor) => {
+    deleteMessage(msg._id, deleteFor);
   };
 
-  const handleKeyDown = (e) => {
-    if (e.key === "Enter") handleSend();
+  const handleReact = (msg, emoji) => {
+    reactToMessage(msg._id, emoji);
   };
+
+  const handleVoiceCall = () => {
+    if (otherUser) startCall(otherUser, "voice");
+  };
+
+  const handleVideoCall = () => {
+    if (otherUser) startCall(otherUser, "video");
+  };
+
+  // Filter messages if search is active
+  const displayedMessages = searchQuery.trim()
+    ? messages.filter((m) =>
+        (m.content || m.message || "").toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : messages;
 
   if (!selectedContact) {
     return (
-      <div
-        className={`flex items-center justify-center h-full ${
-          isDark ? "bg-[#111b21] text-gray-400" : "bg-gray-100 text-gray-500"
-        }`}
-      >
-        Select a chat
+      <div className="h-full flex flex-col items-center justify-center gap-4 bg-slate-50 dark:bg-[#0A0A0F] text-slate-400 dark:text-[#9090B0] font-sans">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
+          <path
+            d="M4 5h16v10H9l-4 4v-4H4V5Z"
+            stroke="#6C63FF"
+            strokeWidth="1.6"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            className="drop-shadow-[0_0_8px_#6C63FF]"
+          />
+        </svg>
+        <p className="text-base font-semibold text-slate-800 dark:text-[#F0F0FF]">No conversation open</p>
+        <p className="text-xs max-w-xs text-center opacity-70">
+          Select a user from the sidebar to begin messaging.
+        </p>
       </div>
     );
   }
 
   return (
-    <div
-      className={`flex flex-col h-full ${
-        isDark ? "bg-[#0b141a] text-white" : "bg-gray-50 text-black"
-      }`}
-    >
-      {/* Header */}
-      <div
-        className={`flex items-center justify-between p-4 border-b ${
-          isDark ? "border-gray-700" : "border-gray-200"
-        }`}
-      >
-        <div>
-          <h2 className="font-semibold">{selectedContact.name}</h2>
-          {isOtherTyping && (
-            <p className="text-xs text-green-500">typing...</p>
-          )}
+    <div className="h-full flex flex-col bg-white dark:bg-[#0A0A0F] text-slate-800 dark:text-[#F0F0FF] font-sans relative">
+      {/* Chat Header */}
+      <ChatHeader
+        otherUser={otherUser}
+        isMobile={isMobile}
+        onBack={() => setSelectedContact(null)}
+        isTyping={isOtherTyping}
+        onVoiceCall={handleVoiceCall}
+        onVideoCall={handleVideoCall}
+        onSearchToggle={() => setSearchOpen(!searchOpen)}
+      />
+
+      {/* Inline Search Bar */}
+      {searchOpen && (
+        <div className="px-4 py-2 bg-slate-50 dark:bg-[#111118] border-b border-slate-200 dark:border-[#2A2A3D] flex items-center gap-2 animate-fade-in">
+          <Search size={14} className="text-slate-400 dark:text-[#4A4A6A]" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search messages..."
+            className="flex-1 bg-white dark:bg-black text-slate-800 dark:text-[#F0F0FF] placeholder-slate-400 dark:placeholder-[#4A4A6A] px-3 py-1.5 rounded-lg text-xs border border-slate-200 dark:border-[#2A2A3D] focus:outline-none focus:border-[#6C63FF]"
+          />
+          <button
+            onClick={() => {
+              setSearchQuery("");
+              setSearchOpen(false);
+            }}
+            className="text-xs text-[#9090B0] hover:text-[#FF6584]"
+          >
+            Cancel
+          </button>
         </div>
+      )}
 
-        <button
-          onClick={() => setSelectedContact(null)}
-          className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 transition"
-        >
-          Back
-        </button>
-      </div>
+      {/* Message List */}
+      <MessageList
+        messages={displayedMessages}
+        currentUserId={currentUser?._id}
+        isLoadingMore={isLoadingMessages}
+        hasMore={false}
+        onReply={(msg) => setReplyTo(msg)}
+        onReact={handleReact}
+        onDelete={handleDelete}
+        onReplyPreviewClick={(reply) => {
+          // Handle scroll to or highlight replied message
+        }}
+      />
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {messages.map((msg) => (
-          <div
-            key={msg.id}
-            className={`max-w-xs px-4 py-2 rounded-lg break-words ${
-              msg.sender === "me"
-                ? "ml-auto bg-green-500 text-white"
-                : isDark
-                ? "bg-gray-700 text-white"
-                : "bg-gray-300 text-black"
-            }`}
-          >
-            {msg.text}
-          </div>
-        ))}
+      {/* Typing Indicator */}
+      {isOtherTyping && <TypingIndicator />}
 
-        {isOtherTyping && (
-          <div
-            className={`max-w-xs px-4 py-2 rounded-lg flex gap-1 ${
-              isDark ? "bg-gray-700" : "bg-gray-300"
-            }`}
-          >
-            <span className="w-2 h-2 rounded-full bg-current opacity-60 animate-bounce [animation-delay:0ms]" />
-            <span className="w-2 h-2 rounded-full bg-current opacity-60 animate-bounce [animation-delay:150ms]" />
-            <span className="w-2 h-2 rounded-full bg-current opacity-60 animate-bounce [animation-delay:300ms]" />
-          </div>
-        )}
-
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Input */}
-      <div
-        className={`p-4 border-t flex gap-2 ${
-          isDark ? "border-gray-700" : "border-gray-200"
-        }`}
-      >
-        <input
-          type="text"
-          value={message}
-          onChange={handleInputChange}
-          onKeyDown={handleKeyDown}
-          placeholder="Type a message..."
-          className={`flex-1 px-4 py-2 border rounded-lg outline-none ${
-            isDark
-              ? "bg-[#202c33] border-gray-600 text-white placeholder-gray-400"
-              : "bg-white border-gray-300 text-black"
-          }`}
-        />
-
-        <button
-          onClick={handleSend}
-          disabled={!message.trim()}
-          className="px-6 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Send
-        </button>
-      </div>
+      {/* Chat Input Compose Bar */}
+      <ChatInput
+        onSend={handleSend}
+        replyTo={replyTo}
+        onCancelReply={clearReplyTo}
+        otherUserId={otherUserId}
+        otherUserName={otherUser?.username || otherUser?.name || "Contact"}
+        onTypingStart={() => startTyping(otherUserId)}
+        onTypingStop={() => stopTyping(otherUserId)}
+      />
     </div>
   );
 };

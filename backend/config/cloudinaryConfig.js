@@ -33,5 +33,6 @@ const multerMiddleware = multer({ dest: "upload/" }).single("media");
 
 module.exports = {
   uploadFileToCloudinary,
+  uploadFileCloudinary: uploadFileToCloudinary,
   multerMiddleware,
 };

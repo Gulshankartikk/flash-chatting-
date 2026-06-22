@@ -1,36 +1,87 @@
 const mongoose = require('mongoose');
 
-const userSchema = new mongoose.Schema({
-  phoneNumber: { type: String, unique: true, sparse: true },
-  phoneSuffix: { type: String }, // fixed naming style
+const userSchema = new mongoose.Schema(
+  {
+    phoneNumber: { type: String, unique: true, sparse: true },
+    phoneSuffix: { type: String }, // country code, e.g. "+91"
 
-  username: { type: String },
+    username: { type: String },
 
-  email: {
-    type: String,
-    lowercase: true,
-    validate: {
-      validator: function (value) {
-        return /^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(value);
+    email: {
+      type: String,
+      lowercase: true,
+      unique: true,
+      sparse: true, // many WhatsApp accounts are phone-only, no email
+      validate: {
+        validator: function (value) {
+          if (!value) return true; // skip validation when not set
+          return /^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(value);
+        },
+        message: "Invalid email address format",
       },
-      message: "Invalid email address format"
-    }
+    },
+
+    emailOtp: { type: String },
+    emailOtpExpiry: { type: Date },
+
+    profilePicture: { type: String },
+    password: { type: String },
+    about: { type: String, default: "Hey there! I am using FlashChat" },
+
+    lastSeen: { type: Date },
+
+    isOnline: { type: Boolean, default: false },
+    isVerified: { type: Boolean, default: false },
+    agreed: { type: Boolean, default: false },
+
+    // ---- WhatsApp-style social/contact features ----
+
+    // Users this account has blocked. Blocking is one-directional and
+    // checked both ways in chat/call logic (sender blocked receiver,
+    // or receiver blocked sender).
+    blockedUsers: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
+
+    // Local device contacts matched against registered phone numbers —
+    // this is how WhatsApp shows "people from your contacts" instead
+    // of a global user search. Synced periodically from the client.
+    contacts: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
+
+    // Privacy controls, mirroring WhatsApp's settings screen. Each
+    // defaults to the most common WhatsApp default ("everyone").
+    privacySettings: {
+      lastSeen: {
+        type: String,
+        enum: ["everyone", "contacts", "nobody"],
+        default: "everyone",
+      },
+      profilePhoto: {
+        type: String,
+        enum: ["everyone", "contacts", "nobody"],
+        default: "everyone",
+      },
+      about: {
+        type: String,
+        enum: ["everyone", "contacts", "nobody"],
+        default: "everyone",
+      },
+      readReceipts: {
+        type: Boolean,
+        default: true,
+      },
+    },
   },
+  { timestamps: true }
+);
 
-  emailOtp: { type: String },
-  emailOtpExpiry: { type: Date },
-
-  profilePicture: { type: String },
-  password: { type: String },
-  about: { type: String },
-
-  lastSeen: { type: Date },
-
-  isOnline: { type: Boolean, default: false },
-  isVerified: { type: Boolean, default: false },
-  agreed: { type: Boolean, default: false }
-
-}, { timestamps: true });
-
-const User = mongoose.model("User", userSchema);
-module.exports = User;
+// Prevent OverwriteModelError on hot-reload (nodemon, dev server)
+module.exports = mongoose.models.User || mongoose.model("User", userSchema);

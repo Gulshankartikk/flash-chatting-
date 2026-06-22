@@ -1,231 +1,349 @@
-const{Server, Socket} = require('socket.io');
-const user =require("../models/user");
-const message =require("../models/message");
-const User = require('../models/user');
+const { Server } = require("socket.io");
+const User = require("../models/user");
+const Message = require("../models/message");
 
-
-// map to store online user->user id,socketId
-const onlineUsers = new Map(); // ✅ FIXED: was missing, caused the crash
+// Map to store online users: userId -> socketId
+const onlineUsers = new Map();
 const typingUsers = new Map();
 
-const initilizeSocket =(server) =>{
-    const io =new Server(server,{
-        cors:{
-            origin:process.env.FRONTEND_URL,
-            credentials:true,
-            methods:['GET','POST','PUT','DELETE','OPTIONS'],
-        },
-        pingTimeout:6000,
+const initilizeSocket = (server) => {
+  const io = new Server(server, {
+    cors: {
+      origin: process.env.FRONTEND_URL,
+      credentials: true,
+      methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    },
+    pingTimeout: 6000,
+  });
 
+  io.on("connection", (socket) => {
+    console.log(`User connected: ${socket.id}`);
+    let userId = null;
+
+    // ─── User comes online ───────────────────────────────────────────────────
+    socket.on("user_connected", async (connectingUserId) => {
+      try {
+        userId = connectingUserId;
+        onlineUsers.set(userId, socket.id);
+        socket.join(userId);
+
+        await User.findByIdAndUpdate(userId, {
+          isOnline: true,
+          lastSeen: new Date(),
+        });
+
+        io.emit("user_status", { userId, isOnline: true });
+      } catch (error) {
+        console.error("Error handling user connection:", error);
+      }
     });
 
-
-    //when a new socket and mark them online in db
-
-    io.on("connection",(socket) => {
-        console.log(`User connected: ${socket.id}`)
-        let userId = null;
-
-        // handle user connection and mark them online in db
-
-        socket.on("user_connected",async(connectingUserId)=>{
-            try {
-                userId =connectingUserId
-                onlineUsers.set(userId,socket.id); // ✅ FIXED: was onlineUser
-                socket.join(userId)
-
-                // update user status in db
-                await user.findByIdAndUpdate(userId,{
-                    isOnline:true,
-                    lastSeen:new Date(),
-                });
-
-                //notify all user that this user is now online
-                io.emit("user_status",{userId,isOnline:true})
-
-            } catch (error) {
-                console.log('Error handling user connection',error)
-            }
-        })
-
-        //return online status of requested user
-        socket.on("get_user_status",(requestedUserId,callback)=>{
-            const isonline =onlineUsers.has(requestedUserId)
-            callback({
-                userId:requestedUserId,
-                isonline,
-                lastSeen:isonline ? new Date() : null,
-            })
-        })
-
-        //forword message to receiver if online
-
-        socket.on("send_message",async(message)=>{
-            try {
-                const receiverSocketId =onlineUsers.get(message.receiver?._id); // ✅ FIXED: was onlineUser
-                if(receiverSocketId){
-                    io.to(receiverSocketId).emit("receive_message",message)
-                }
-            } catch (error) {
-                console.error("Error sending message",error)
-                socket.emit("message_error",{error:"Failed to send message"})
-                
-            }
-        })
-       
-       //update message as read and notify sender 
-       socket.on("message_read",async({messageIds,senderId}) =>{
-        try {
-            await MessageChannel.updateMany(
-                {_id:{$in:messageIds}},
-                {$set:{messageStatus:"read"}}
-            )
-            const senderSocketId =onlineUsers.get(senderId);
-            if(senderSocketId){
-                messageIds.forEach((messageId) =>{
-                    io.to(senderSocketId).emit("message_status_update",{
-                        messageId,
-                        messageStatus:"read"
-                    })
-                })
-            }
-        } catch (error) {
-            console.error('error updating message read status',error)
+    // ─── Online status check ─────────────────────────────────────────────────
+    // ✅ FIX: this always returned `new Date()` as lastSeen whenever the
+    // user was online, which is meaningless — "last seen" should only ever
+    // be a real timestamp from the DB for an *offline* user, and absent
+    // entirely (not "right now") while they're online, matching how
+    // `user_status` and `onUserOffline` already report it everywhere else.
+    socket.on("get_user_status", async (requestedUserId, callback) => {
+      try {
+        const isOnline = onlineUsers.has(requestedUserId);
+        if (isOnline) {
+          callback({ userId: requestedUserId, isOnline: true, lastSeen: null });
+          return;
         }
-       })
-       //handle typing start eventv and auto _stop after 3s
-       socket.on("typing-start",({conversation,receiverId})=>{
-         if(!userId || !conversationId || !receiverId)return;
+        const user = await User.findById(requestedUserId).select("lastSeen");
+        callback({
+          userId: requestedUserId,
+          isOnline: false,
+          lastSeen: user?.lastSeen || null,
+        });
+      } catch (error) {
+        console.error("Error fetching user status:", error);
+        callback({ userId: requestedUserId, isOnline: false, lastSeen: null });
+      }
+    });
 
-         if(!typingUsers.has(userId)) typingUsers.set(userId,{});
+    // ─── Forward message to receiver ─────────────────────────────────────────
+    // ✅ FIX 1: trust `socket`'s authenticated userId for the sender, not
+    // whatever `message.sender` the client claims — previously any client
+    // could emit a message and impersonate another user as the sender.
+    // ✅ FIX 2: WhatsApp shows a *delivered* double-check the moment the
+    // message reaches the recipient's device (separate from *read*, which
+    // only happens once they open the chat). Previously there was no
+    // "delivered" step at all — a message just silently sat at "sent"
+    // until the receiver happened to open the conversation, so the UI had
+    // no way to show the delivered tick.
+    socket.on("send_message", async (message) => {
+      try {
+        if (!userId) return;
 
-         const userTyping =typingUsers.get(userId)
+        const receiverId = message.receiver?._id || message.receiverId;
+        const receiverSocketId = onlineUsers.get(receiverId);
 
-         userTyping[conversationId] =true;
+        if (receiverSocketId) {
+          io.to(receiverSocketId).emit("receive_message", message);
 
-         //clear any exiting timeout
-         if(userTyping[`${conversationId}_timeout`]){
-            clearTimeout(userTyping[`${conversationId}_timeout`])
-         }
-         //auto_stop after 3s
-         userTyping[`${conversationId}_timeout`] = setTimeout(()=>{
-            userTyping[conversationId] =false;
-            socket.to(receiverId).emit("user_typing",{
+          // Recipient is online right now → mark delivered and tell the
+          // sender so their UI can flip ✓ → ✓✓ (gray).
+          if (message._id) {
+            await Message.findByIdAndUpdate(message._id, {
+              messageStatus: "delivered",
+            });
+          }
+          socket.emit("message_status_update", {
+            messageId: message._id,
+            messageStatus: "delivered",
+          });
+        }
+      } catch (error) {
+        console.error("Error sending message:", error);
+        socket.emit("message_error", { error: "Failed to send message" });
+      }
+    });
+
+    // ─── Mark messages as read ───────────────────────────────────────────────
+    socket.on("message_read", async ({ messageIds, senderId }) => {
+      try {
+        if (!messageIds?.length) return;
+
+        await Message.updateMany(
+          { _id: { $in: messageIds } },
+          { $set: { messageStatus: "read" } }
+        );
+
+        const senderSocketId = onlineUsers.get(senderId);
+        if (senderSocketId) {
+          messageIds.forEach((messageId) => {
+            io.to(senderSocketId).emit("message_status_update", {
+              messageId,
+              messageStatus: "read",
+            });
+          });
+        }
+      } catch (error) {
+        console.error("Error updating message read status:", error);
+      }
+    });
+
+    // ─── Typing start ────────────────────────────────────────────────────────
+    socket.on("typing_start", ({ conversationId, receiverId }) => {
+      if (!userId || !conversationId || !receiverId) return;
+
+      if (!typingUsers.has(userId)) typingUsers.set(userId, {});
+      const userTyping = typingUsers.get(userId);
+
+      // Track which receiver to notify, not just a boolean, so we can
+      // still reach them later (e.g. on disconnect cleanup below).
+      userTyping[conversationId] = { active: true, receiverId };
+
+      // Clear any existing auto-stop timeout
+      if (userTyping[`${conversationId}_timeout`]) {
+        clearTimeout(userTyping[`${conversationId}_timeout`]);
+      }
+
+      // Auto-stop after 3s
+      userTyping[`${conversationId}_timeout`] = setTimeout(() => {
+        if (userTyping[conversationId]) userTyping[conversationId].active = false;
+        socket.to(receiverId).emit("user_typing", {
+          userId,
+          conversationId,
+          isTyping: false,
+        });
+      }, 3000);
+
+      // Notify receiver
+      socket.to(receiverId).emit("user_typing", {
+        userId,
+        conversationId,
+        isTyping: true,
+      });
+    });
+
+    // ─── Typing stop ─────────────────────────────────────────────────────────
+    socket.on("typing_stop", ({ conversationId, receiverId }) => {
+      if (!userId || !conversationId || !receiverId) return;
+
+      if (typingUsers.has(userId)) {
+        const userTyping = typingUsers.get(userId);
+        if (userTyping[conversationId]) userTyping[conversationId].active = false;
+
+        if (userTyping[`${conversationId}_timeout`]) {
+          clearTimeout(userTyping[`${conversationId}_timeout`]);
+          delete userTyping[`${conversationId}_timeout`];
+        }
+      }
+
+      socket.to(receiverId).emit("user_typing", {
+        userId,
+        conversationId,
+        isTyping: false,
+      });
+    });
+
+    // ─── Add / update reaction ───────────────────────────────────────────────
+    // ✅ FIX: trust the socket's own `userId`, not the client-supplied
+    // `reactionUserId` — as written, anyone could pass someone else's id
+    // and post a reaction "as" them.
+    socket.on("add_reaction", async ({ messageId, emoji }) => {
+      try {
+        if (!userId) return;
+        const message = await Message.findById(messageId);
+        if (!message) return;
+
+        const existingIndex = message.reactions.findIndex(
+          (r) => r.user.toString() === userId
+        );
+
+        if (existingIndex > -1) {
+          const existing = message.reactions[existingIndex];
+          if (existing.emoji === emoji) {
+            // Same emoji — remove (toggle off)
+            message.reactions.splice(existingIndex, 1);
+          } else {
+            // Different emoji — update
+            message.reactions[existingIndex].emoji = emoji;
+          }
+        } else {
+          message.reactions.push({ user: userId, emoji });
+        }
+
+        await message.save();
+
+        const populatedMessage = await Message.findById(message._id)
+          .populate("sender", "username profilePicture")
+          .populate("receiver", "username profilePicture")
+          .populate("reactions.user", "username");
+
+        const reactionUpdated = {
+          messageId,
+          reactions: populatedMessage.reactions,
+        };
+
+        const senderSocket = onlineUsers.get(
+          populatedMessage.sender._id.toString()
+        );
+        const receiverSocket = onlineUsers.get(
+          populatedMessage.receiver._id.toString()
+        );
+
+        if (senderSocket)
+          io.to(senderSocket).emit("reaction_update", reactionUpdated);
+        if (receiverSocket)
+          io.to(receiverSocket).emit("reaction_update", reactionUpdated);
+      } catch (error) {
+        console.error("Error handling reaction:", error);
+      }
+    });
+
+    // ─── Video & Voice Call Signaling ─────────────────────────────────────────
+    socket.on("call_user", ({ to, offer, from, roomId, callType, callerName, callerAvatar }) => {
+      const targetSocket = onlineUsers.get(to);
+      if (targetSocket) {
+        io.to(targetSocket).emit("incoming_call", { from, offer, roomId, callType, callerName, callerAvatar });
+      }
+    });
+
+    socket.on("accept_call", ({ to, answer }) => {
+      const targetSocket = onlineUsers.get(to);
+      if (targetSocket) {
+        io.to(targetSocket).emit("call_accepted", { answer });
+      }
+    });
+
+    socket.on("reject_call", ({ to }) => {
+      const targetSocket = onlineUsers.get(to);
+      if (targetSocket) {
+        io.to(targetSocket).emit("call_rejected");
+      }
+    });
+
+    socket.on("ice_candidate", ({ to, candidate }) => {
+      const targetSocket = onlineUsers.get(to);
+      if (targetSocket) {
+        io.to(targetSocket).emit("ice_candidate", { candidate });
+      }
+    });
+
+    socket.on("end_call", ({ to }) => {
+      const targetSocket = onlineUsers.get(to);
+      if (targetSocket) {
+        io.to(targetSocket).emit("call_ended");
+      }
+    });
+
+    // ─── User Status System ───────────────────────────────────────────────────
+    socket.on("set_status", async ({ userId: statusUserId, status }) => {
+      try {
+        const uId = statusUserId || userId;
+        if (!uId) return;
+
+        const isOnline = status === "online" || status === "away" || status === "busy";
+        await User.findByIdAndUpdate(uId, {
+          isOnline,
+          lastSeen: isOnline ? null : new Date(),
+        });
+        io.emit("contact_status_change", { userId: uId, status, lastSeen: isOnline ? null : new Date() });
+      } catch (error) {
+        console.error("Error setting status:", error);
+      }
+    });
+
+    // ─── Disconnect ──────────────────────────────────────────────────────────
+    const handleDisconnected = async () => {
+      if (!userId) return;
+
+      try {
+        onlineUsers.delete(userId);
+
+        // ✅ FIX: previously the timeouts were cleared but nobody was ever
+        // told typing had stopped — if a user closed the tab/app mid-type,
+        // the other side's "typing…" indicator would stay stuck until its
+        // own 3s timeout (client-side) happened to also catch it, or
+        // forever if that didn't exist. Now we proactively notify every
+        // conversation they were typing in.
+        if (typingUsers.has(userId)) {
+          const userTyping = typingUsers.get(userId);
+          Object.keys(userTyping).forEach((key) => {
+            if (key.endsWith("_timeout")) {
+              clearTimeout(userTyping[key]);
+            } else if (userTyping[key]?.active) {
+              const conversationId = key;
+              const { receiverId } = userTyping[key];
+              io.to(receiverId).emit("user_typing", {
                 userId,
                 conversationId,
-                isTyping:false
-            })
-         },3000)
-
-         //notify receiver
-         socket.io(receiverId).emit("user_Typing",{
-            userId,
-            conversationId,
-            isTyping:true
-        
-         })
-       }) 
-       socket.on("typing_stop",({conversationId,receiverId}) =>{
-        if(!userId || !conversationId || !receiverId)return;
-
-         if(typingUsers.has(userId)) {
-            const userTyping =typingUsers.get(userId);
-            userTyping[conversationId]=false
-
-            if(userTyping[`${conversationId}_timeout`]){
-                clearTimeout(userTyping[`${conversationId}_timeout`])
-                delete userTyping[`${conversationId}_timeout`]
+                isTyping: false,
+              });
             }
-         };
-
-         socket.to(receiverId).emit("user_typing",{
-            userId,
-            conversationId,
-            isTyping:false
-         })
-
-         
-       })
-       //add or update reaction on message
-       socket.on("add_reaction",async({messageId,emoji,userId,reactionUserId}) =>{
-        try {
-            const message =await Message.findById(messageId);
-            if(!message)return;
-
-            const exitingIndex =message.reaction.findIndex(
-                (r)=> r.user.toString()===reactionUserId
-            )
-            if(exitingIndex > -1){
-                const exiting=message.reaction(exitingIndex)
-                if(exiting.emoji===emoji){
-
-                    //remove same reaction
-                    message.reaction.splice(exitingIndex,1)
-                } else {
-                    //change emoji
-                    message.reaction[exitingIndex].emoji = emoji;
-                }
-            } else {
-                    
-                    message.reaction.push({ user:reactionUserId,emoji});
-                }
-                await message.save();
-                const populatedMessage = await Message.findOne(message?._id)
-                  .populated("sender","username profilePicture")
-                  .populated("receiver","username profilePicture")
-                  .populated("reactions.user","username ")
-
-                  const reactionUpdated ={
-                    messageId,
-                    reaction:populatedMessage.reaction
-                  }
-
-                  const senderSocket =onlineUsers.get(populatedMessage.sender_id.toString()); // ✅ FIXED: was onlineUser
-                  const receiverSocket =onlineUsers.get(populatedMessage.sender_id.toString()); // ✅ FIXED: was onlineUser
-
-                  if(senderSocket) io.to(senderSocket).emit("reaction_update",reactionUpdated)
-                  if(receiverSocket) io.to(senderSocket).emit("reaction_update",reactionUpdated)
-                } catch (error) {
-                   console.log("error handling reaction",error)
+          });
+          typingUsers.delete(userId);
         }
-       });
-        // handle disconnection and mark user offline
-        const handleDisconnected =async() =>{
-             if(!userId)return;
 
-             try {
-                onlineUsers.delete(userId); // ✅ FIXED: was onlineUser
-                //clear all typing timesouts
-                if(typingUsers.has(userId)){
-                    const user_Typing =typingUsers.get(userId);
-                    Object.keys(userTyping).foreach((key)=>{
-                        if(key.endWith('_timeout'))clearTimeout(userTyping[key])
-                    })
-                typingUsers.delete(userId)
-                }
-                await User.findByIdAndUpdate(userId,{
-                    isOnline:false,
-                    lastseen:new Date(),
-                })
-                io.emit("user_status",{
-                    userId,isonline:false,
-                    lastSeen:new Date(),
-                })
+        await User.findByIdAndUpdate(userId, {
+          isOnline: false,
+          lastSeen: new Date(),
+        });
 
-                socket.leave(userId),
-                console.log(`user${userId} disconnected`)
-             } catch (error) {
-                console.error("error handling disconnection",error)
-             }
-        }
-        //disconnect event
-        socket.on("disconnect",handleDisconnected)
+        io.emit("user_status", {
+          userId,
+          isOnline: false,
+          lastSeen: new Date(),
+        });
 
-    });
-    // attach the online user map to the socket server for external user
-    io.socketUserMap = onlineUsers; // ✅ FIXED: onlineUsers now declared at top
+        socket.leave(userId);
+        console.log(`User ${userId} disconnected`);
+      } catch (error) {
+        console.error("Error handling disconnection:", error);
+      }
+    };
 
-    return io;
-   
+    socket.on("disconnect", handleDisconnected);
+  });
+
+  // Expose online user map for external use
+  io.socketUserMap = onlineUsers;
+
+  return io;
 };
-module.exports =initilizeSocket;
+
+module.exports = initilizeSocket;

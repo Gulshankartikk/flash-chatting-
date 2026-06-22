@@ -10,9 +10,8 @@ exports.createStatus = async (req, res) => {
     const file = req.file;
 
     let mediaUrl = null;
-    let finalcontentType = "text";
+    let finalContentType = "text";
 
-    // handle file upload
     if (file) {
       const uploadFile = await uploadFileCloudinary(file);
 
@@ -23,16 +22,16 @@ exports.createStatus = async (req, res) => {
       mediaUrl = uploadFile.secure_url;
 
       if (file.mimetype.startsWith("image")) {
-        finalcontentType = "image";
+        finalContentType = "image";
       } else if (file.mimetype.startsWith("video")) {
-        finalcontentType = "video";
+        finalContentType = "video";
       } else {
         return response(res, 400, "Unsupported file type");
       }
     } else if (content?.trim()) {
-      finalcontentType = "text";
+      finalContentType = "text";
     } else {
-      return response(res, 400, "Message content or media is required");
+      return response(res, 400, "Status content or media is required");
     }
 
     const expiresAt = new Date();
@@ -41,7 +40,7 @@ exports.createStatus = async (req, res) => {
     const newStatus = new Status({
       user: userId,
       content: mediaUrl || content,
-      contentType: finalcontentType,
+      contentType: finalContentType,
       expiresAt,
     });
 
@@ -51,12 +50,11 @@ exports.createStatus = async (req, res) => {
       .populate("user", "username profilePicture")
       .populate("viewers", "username profilePicture");
 
-    // emit socket event
-
+    // broadcast to all connected users except the creator, so their
+    // status list updates live (like WhatsApp's status tray)
     if (req.io && req.socketUserMap) {
-      //broadcast to all connecting users except the creator
       for (const [connectedId, socketId] of req.socketUserMap) {
-        if (connectedUserId !== userId) {
+        if (connectedId !== userId) {
           req.io.to(socketId).emit("new_status", populatedStatus);
         }
       }
@@ -69,17 +67,45 @@ exports.createStatus = async (req, res) => {
   }
 };
 
-// ================= GET STATUS =================
+// ================= GET STATUS (grouped by user, WhatsApp-style) =================
 exports.getStatus = async (req, res) => {
+  const userId = req.user.userId;
+
   try {
     const statuses = await Status.find({
       expiresAt: { $gt: new Date() },
     })
       .populate("user", "username profilePicture")
       .populate("viewers", "username profilePicture")
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: 1 }); // oldest first within each user's tray
 
-    return response(res, 200, "Statuses retrieved successfully", statuses);
+    // group into "my status" + "contacts' statuses", each contact
+    // bucketed with all their active updates — mirrors how the
+    // status tab actually renders, instead of a flat list
+    const grouped = {};
+
+    for (const status of statuses) {
+      const ownerId = String(status.user._id);
+
+      if (!grouped[ownerId]) {
+        grouped[ownerId] = {
+          user: status.user,
+          updates: [],
+          allViewed: true,
+        };
+      }
+
+      const viewedByMe = status.viewers.some((v) => String(v._id) === String(userId));
+      if (!viewedByMe && ownerId !== String(userId)) {
+        grouped[ownerId].allViewed = false;
+      }
+
+      grouped[ownerId].updates.push(status);
+    }
+
+    const result = Object.values(grouped);
+
+    return response(res, 200, "Statuses retrieved successfully", result);
   } catch (error) {
     console.error(error);
     return response(res, 500, "Internal server error");
@@ -98,29 +124,31 @@ exports.viewStatus = async (req, res) => {
       return response(res, 404, "Status not found");
     }
 
-    if (!status.viewers.includes(userId)) {
+    const alreadyViewed = status.viewers.some((v) => String(v) === String(userId));
+
+    if (!alreadyViewed) {
       status.viewers.push(userId);
       await status.save();
 
-      await Status.findById(statusId)
+      const updatedStatus = await Status.findById(statusId)
         .populate("user", "username profilePicture")
         .populate("viewers", "username profilePicture");
-      //emit socket event
+
       if (req.io && req.socketUserMap) {
-        //broadcast to all connecting users except the creator
         const statusOwnerSocketId = req.socketUserMap.get(
-          status.user._id.toString(),
+          updatedStatus.user._id.toString()
         );
+
         if (statusOwnerSocketId) {
           const viewData = {
             statusId,
             viewerId: userId,
-            totalViewers: updateStatus.viewers.lenght,
-            viewers: updateStatus.viewers,
+            totalViewers: updatedStatus.viewers.length,
+            viewers: updatedStatus.viewers,
           };
-          res.io.to(statusOwnerSocketId).emit("status_viewed", viewData);
+          req.io.to(statusOwnerSocketId).emit("status_viewed", viewData);
         } else {
-          console.log("status owner not connected");
+          console.log("Status owner not connected");
         }
       }
     } else {
@@ -133,8 +161,6 @@ exports.viewStatus = async (req, res) => {
     return response(res, 500, "Internal server error");
   }
 };
-
-
 
 // ================= DELETE STATUS =================
 exports.deleteStatus = async (req, res) => {
@@ -155,9 +181,8 @@ exports.deleteStatus = async (req, res) => {
     await status.deleteOne();
 
     if (req.io && req.socketUserMap) {
-      //broadcast to all connecting users except the creator
       for (const [connectedId, socketId] of req.socketUserMap) {
-        if (connectedUserId !== userId) {
+        if (connectedId !== userId) {
           req.io.to(socketId).emit("status_deleted", statusId);
         }
       }

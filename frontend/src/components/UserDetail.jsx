@@ -1,34 +1,55 @@
-import React from "react";
-import { ArrowLeft, Phone, Mail, MapPin, MessageCircle } from "lucide-react";
+import React, { useState } from "react";
+import {
+  ArrowLeft,
+  Phone,
+  Mail,
+  MapPin,
+  MessageCircle,
+  BellOff,
+  Image as ImageIcon,
+  Ban,
+  Flag,
+  ChevronRight,
+} from "lucide-react";
 
 import useLayoutStore from "../store/useLayoutStore";
 import useThemeStore from "../store/useThemeStore";
 
 /**
- * UserDetail — contact profile panel
+ * UserDetail — contact profile panel (WhatsApp visual language)
  * --------------------------------------------------------------
- * Visual language matches Login.jsx / ChatWindow.jsx / HomePage.jsx
- * / Layout.jsx / Sidebar.jsx: ink/paper palette, Space Grotesk for
- * the name, Inter for body text, green accent. Signature touch:
- * the bio reads as a quoted line under the name (like a caption
- * under a portrait), and contact details sit in quiet info rows
- * with a left icon chip instead of plain inline icons.
+ * Now matches HomePage.jsx / Layout.jsx / Sidebar.jsx: WhatsApp
+ * teal-green header (#075E54), brand green (#25D366) accent, Inter
+ * throughout. Signature touch retained: bio reads as a quoted
+ * caption under the name, contact details sit in icon-chip rows.
+ * --------------------------------------------------------------
+ * Changes from previous pass:
+ * - "Call" removed (no calling feature yet) — "Message" now
+ *   actually navigates back to the chat list/window.
+ * - Added Mute notifications toggle, Media/links/docs placeholder,
+ *   and Block/Report — the WhatsApp contact-info staples.
  */
 
 const UserDetail = () => {
   const selectedContact = useLayoutStore((state) => state.selectedContact);
   const setSelectedContact = useLayoutStore((state) => state.setSelectedContact);
+  const setActiveView = useLayoutStore((state) => state.setActiveView);
   const { theme } = useThemeStore();
   const dark = theme === "dark";
 
-  // ---- Theme tokens (mirrors the rest of the app) ----
-  const ink = dark ? "#F2F0E9" : "#16221F";
-  const sub = dark ? "#9FB3AC" : "#5C6B66";
-  const accent = "#1FAE5C";
-  const border = dark ? "rgba(242,240,233,0.10)" : "rgba(22,34,31,0.10)";
-  const panelBg = dark ? "#0B1F1C" : "#F2EFE7";
-  const headerBg = dark ? "#13302B" : "#FDFBF6";
-  const rowBg = dark ? "#13302B" : "#FFFFFF";
+  const [isMuted, setIsMuted] = useState(false);
+  const [confirmAction, setConfirmAction] = useState(null); // "block" | "report" | null
+
+  // ---- Premium Dark palette tokens ----
+  const ink = "#F0F0FF";
+  const sub = "#9090B0";
+  const accent = "#6C63FF";
+  const danger = "#FF3D71";
+  const border = "#2A2A3D";
+  const panelBg = "#0A0A0F";
+  const headerBg = "#111118";
+  const rowBg = "#1A1A26";
+  const dialogBg = "#1A1A26";
 
   if (!selectedContact) {
     return (
@@ -51,6 +72,23 @@ const UserDetail = () => {
     );
   }
 
+  const handleMessage = () => {
+    // Contact is already the active conversation in the layout store —
+    // just navigate back to the chat list/window view.
+    setActiveView("chats");
+  };
+
+  const handleConfirm = () => {
+    if (confirmAction === "block") {
+      // TODO: wire to a real block-user API call
+      console.log("Blocked:", selectedContact._id);
+    } else if (confirmAction === "report") {
+      // TODO: wire to a real report-user API call
+      console.log("Reported:", selectedContact._id);
+    }
+    setConfirmAction(null);
+  };
+
   return (
     <div
       style={{
@@ -59,15 +97,21 @@ const UserDetail = () => {
         background: panelBg,
         color: ink,
         fontFamily: "Inter, sans-serif",
+        position: "relative",
       }}
     >
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap');
-        .ud-display { font-family: 'Space Grotesk', sans-serif; }
-        .ud-icon-btn { background: none; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; border-radius: 10px; padding: 8px; transition: background 0.12s ease; color: inherit; }
-        .ud-icon-btn:hover { background: ${dark ? "rgba(242,240,233,0.08)" : "rgba(22,34,31,0.06)"}; }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        .ud-icon-btn { background: none; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; border-radius: 50%; padding: 8px; transition: background 0.12s ease; color: inherit; }
+        .ud-icon-btn:hover { background: rgba(255,255,255,0.12); }
         .ud-action-btn:hover { filter: brightness(1.06); }
-        .ud-action-secondary:hover { background: ${dark ? "rgba(242,240,233,0.06)" : "rgba(22,34,31,0.05)"}; }
+        .ud-list-row { display: flex; align-items: center; gap: 12px; padding: 13px 16px; cursor: pointer; transition: background 0.12s ease; background: none; border: none; width: 100%; text-align: left; font-family: inherit; }
+        .ud-list-row:hover { background: ${dark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)"}; }
+        .ud-toggle { width: 38px; height: 22px; border-radius: 11px; border: none; cursor: pointer; position: relative; transition: background 0.15s ease; padding: 0; flex-shrink: 0; }
+        .ud-toggle-knob { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform 0.15s ease; box-shadow: 0 1px 2px rgba(0,0,0,0.25); }
+        .ud-fade-in { animation: udFadeIn 0.2s ease both; }
+        @keyframes udFadeIn { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
+        @media (prefers-reduced-motion: reduce) { .ud-fade-in { animation: none !important; } }
       `}</style>
 
       {/* Header */}
@@ -78,7 +122,7 @@ const UserDetail = () => {
           gap: 12,
           padding: "14px 16px",
           background: headerBg,
-          borderBottom: `1px solid ${border}`,
+          color: "#FFFFFF",
         }}
       >
         <button
@@ -88,7 +132,7 @@ const UserDetail = () => {
         >
           <ArrowLeft size={20} />
         </button>
-        <h2 className="ud-display" style={{ fontSize: 17, fontWeight: 600, margin: 0, letterSpacing: -0.2 }}>
+        <h2 style={{ fontSize: 17, fontWeight: 500, margin: 0 }}>
           Contact info
         </h2>
       </div>
@@ -107,7 +151,7 @@ const UserDetail = () => {
           <img
             src={
               selectedContact.profilePic ||
-              `https://ui-avatars.com/api/?name=${encodeURIComponent(selectedContact.name)}&background=1FAE5C&color=fff`
+              `https://ui-avatars.com/api/?name=${encodeURIComponent(selectedContact.name)}&background=25D366&color=fff`
             }
             alt={selectedContact.name}
             style={{
@@ -115,7 +159,6 @@ const UserDetail = () => {
               height: 116,
               borderRadius: "50%",
               objectFit: "cover",
-              border: `3px solid ${accent}`,
             }}
           />
           {selectedContact.isOnline && (
@@ -127,14 +170,15 @@ const UserDetail = () => {
                 width: 18,
                 height: 18,
                 borderRadius: "50%",
-                background: accent,
+                background: "#00D4FF",
+                boxShadow: "0 0 8px #00D4FF",
                 border: `3px solid ${panelBg}`,
               }}
             />
           )}
         </div>
 
-        <h3 className="ud-display" style={{ fontSize: 24, fontWeight: 700, margin: "16px 0 0", letterSpacing: -0.3 }}>
+        <h3 style={{ fontSize: 22, fontWeight: 600, margin: "16px 0 0" }}>
           {selectedContact.name}
         </h3>
 
@@ -162,12 +206,38 @@ const UserDetail = () => {
         )}
       </div>
 
+      {/* Primary action — Message only (Call removed: no calling feature yet) */}
+      <div style={{ padding: "0 18px 8px" }}>
+        <button
+          className="ud-action-btn"
+          onClick={handleMessage}
+          style={{
+            width: "100%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 8,
+            padding: "12px 0",
+            borderRadius: 10,
+            border: "none",
+            background: accent,
+            color: "#fff",
+            fontSize: 14,
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          <MessageCircle size={17} />
+          Message
+        </button>
+      </div>
+
       {/* Details */}
-      <div style={{ padding: "0 18px", display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ padding: "20px 18px 0", display: "flex", flexDirection: "column", gap: 10 }}>
         <p
           style={{
             fontSize: 11.5,
-            fontWeight: 700,
+            fontWeight: 600,
             letterSpacing: 0.6,
             textTransform: "uppercase",
             color: sub,
@@ -182,53 +252,130 @@ const UserDetail = () => {
         <InfoRow icon={MapPin} label="Location" value={selectedContact.location} rowBg={rowBg} ink={ink} sub={sub} accent={accent} />
       </div>
 
-      {/* Actions */}
-      <div style={{ padding: "24px 18px 28px", display: "flex", gap: 10 }}>
-        <button
-          className="ud-action-btn"
-          onClick={() => setSelectedContact(selectedContact)}
-          style={{
-            flex: 1,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 8,
-            padding: "12px 0",
-            borderRadius: 12,
-            border: "none",
-            background: accent,
-            color: "#0B1F1C",
-            fontSize: 14,
-            fontWeight: 700,
-            cursor: "pointer",
-          }}
-        >
-          <MessageCircle size={17} />
-          Message
-        </button>
-
-        <button
-          className="ud-action-secondary"
-          style={{
-            flex: 1,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 8,
-            padding: "12px 0",
-            borderRadius: 12,
-            border: `1.5px solid ${border}`,
-            background: "transparent",
-            color: ink,
-            fontSize: 14,
-            fontWeight: 700,
-            cursor: "pointer",
-          }}
-        >
-          <Phone size={16} />
-          Call
+      {/* Media, links and docs */}
+      <div style={{ marginTop: 18, borderTop: `1px solid ${border}` }}>
+        <button className="ud-list-row" style={{ color: ink }}>
+          <ImageIcon size={19} style={{ color: sub, flexShrink: 0 }} />
+          <span style={{ flex: 1, fontSize: 14 }}>Media, links and docs</span>
+          <span style={{ fontSize: 13, color: sub }}>0</span>
+          <ChevronRight size={16} style={{ color: sub }} />
         </button>
       </div>
+
+      {/* Notifications */}
+      <div style={{ borderTop: `1px solid ${border}` }}>
+        <div className="ud-list-row" style={{ cursor: "default" }}>
+          <BellOff size={19} style={{ color: sub, flexShrink: 0 }} />
+          <span style={{ flex: 1, fontSize: 14 }}>Mute notifications</span>
+          <button
+            className="ud-toggle"
+            role="switch"
+            aria-checked={isMuted}
+            aria-label="Mute notifications"
+            onClick={() => setIsMuted((v) => !v)}
+            style={{ background: isMuted ? accent : dark ? "#3A4750" : "#CFD4D8" }}
+          >
+            <span
+              className="ud-toggle-knob"
+              style={{ transform: isMuted ? "translateX(16px)" : "translateX(0)" }}
+            />
+          </button>
+        </div>
+      </div>
+
+      {/* Danger zone */}
+      <div style={{ borderTop: `1px solid ${border}`, marginBottom: 12 }}>
+        <button
+          className="ud-list-row"
+          style={{ color: danger }}
+          onClick={() => setConfirmAction("block")}
+        >
+          <Ban size={19} style={{ flexShrink: 0 }} />
+          <span style={{ fontSize: 14, fontWeight: 500 }}>Block {selectedContact.name}</span>
+        </button>
+        <button
+          className="ud-list-row"
+          style={{ color: danger }}
+          onClick={() => setConfirmAction("report")}
+        >
+          <Flag size={19} style={{ flexShrink: 0 }} />
+          <span style={{ fontSize: 14, fontWeight: 500 }}>Report {selectedContact.name}</span>
+        </button>
+      </div>
+
+      {/* Confirm dialog — shared for Block / Report */}
+      {confirmAction && (
+        <div
+          className="ud-fade-in"
+          style={{
+            position: "fixed",
+            inset: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "rgba(0,0,0,0.55)",
+            zIndex: 50,
+            padding: 16,
+          }}
+        >
+          <div
+            style={{
+              background: dialogBg,
+              color: ink,
+              borderRadius: 12,
+              padding: 24,
+              maxWidth: 340,
+              width: "100%",
+              boxShadow: dark
+                ? "0 18px 40px -12px rgba(0,0,0,0.55)"
+                : "0 18px 40px -12px rgba(0,0,0,0.22)",
+            }}
+          >
+            <h3 style={{ fontSize: 16, fontWeight: 600, margin: "0 0 8px" }}>
+              {confirmAction === "block" ? `Block ${selectedContact.name}?` : `Report ${selectedContact.name}?`}
+            </h3>
+            <p style={{ fontSize: 13.5, color: sub, margin: "0 0 20px", lineHeight: 1.5 }}>
+              {confirmAction === "block"
+                ? "Blocked contacts can no longer call or message you. They won't be notified."
+                : "Tell us they're sending spam, abuse, or anything that breaks the rules. We'll review and won't reveal it was you."}
+            </p>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button
+                onClick={() => setConfirmAction(null)}
+                style={{
+                  flex: 1,
+                  padding: "10px 0",
+                  borderRadius: 8,
+                  border: `1.5px solid ${border}`,
+                  background: "transparent",
+                  color: ink,
+                  fontSize: 13.5,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirm}
+                style={{
+                  flex: 1,
+                  padding: "10px 0",
+                  borderRadius: 8,
+                  border: "none",
+                  background: danger,
+                  color: "#fff",
+                  fontSize: 13.5,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                {confirmAction === "block" ? "Block" : "Report"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -243,7 +390,7 @@ const InfoRow = ({ icon: Icon, label, value, rowBg, ink, sub, accent }) => (
       alignItems: "center",
       gap: 12,
       padding: "12px 14px",
-      borderRadius: 12,
+      borderRadius: 10,
       background: rowBg,
     }}
   >
@@ -251,7 +398,7 @@ const InfoRow = ({ icon: Icon, label, value, rowBg, ink, sub, accent }) => (
       style={{
         width: 36,
         height: 36,
-        borderRadius: 10,
+        borderRadius: "50%",
         background: `${accent}1a`,
         color: accent,
         display: "flex",

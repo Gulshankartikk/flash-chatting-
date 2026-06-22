@@ -1,31 +1,35 @@
 const { uploadFileCloudinary } = require("../config/cloudinaryConfig");
 const Conversation = require("../models/Conversation");
-const message = require("../models/message");
 const Message = require("../models/message");
 const response = require("../utils/responseHandler");
 
+// ================= SEND MESSAGE =================
 // ================= SEND MESSAGE =================
 exports.sendMessage = async (req, res) => {
   try {
     const { senderId, receiverId, content, messageStatus } = req.body;
     const file = req.file;
 
+    if (!senderId || !receiverId) {
+      return response(res, 400, "senderId and receiverId are required");
+    }
+
+    if (senderId === receiverId) {
+      return response(res, 400, "Cannot send a message to yourself");
+    }
+
     const participants = [senderId, receiverId].sort();
 
-    // check if conversation exists
-    let conversationDoc = await Conversation.findOne({
-      participants,
-    });
+    let conversationDoc = await Conversation.findOne({ participants });
 
     if (!conversationDoc) {
-      conversationDoc = new Conversation({ participants });
+      conversationDoc = new Conversation({ participants, unreadCounts: {} });
       await conversationDoc.save();
     }
 
     let imageOrVideoUrl = null;
     let contentType = null;
 
-    // handle file upload
     if (file) {
       const uploadFile = await uploadFileCloudinary(file);
 
@@ -39,6 +43,8 @@ exports.sendMessage = async (req, res) => {
         contentType = "image";
       } else if (file.mimetype.startsWith("video")) {
         contentType = "video";
+      } else if (file.mimetype.startsWith("audio")) {
+        contentType = "audio";
       } else {
         return response(res, 400, "Unsupported file type");
       }
@@ -52,7 +58,7 @@ exports.sendMessage = async (req, res) => {
       conversation: conversationDoc._id,
       sender: senderId,
       receiver: receiverId,
-      content,
+      content: content?.trim() || "",
       imageOrVideoUrl,
       contentType,
       messageStatus: messageStatus || "sent",
@@ -61,9 +67,23 @@ exports.sendMessage = async (req, res) => {
     await newMessage.save();
 
     conversationDoc.lastMessage = newMessage._id;
-    conversationDoc.unreadCount = (conversationDoc.unreadCount || 0) + 1;
+
+    if (!conversationDoc.unreadCounts) conversationDoc.unreadCounts = new Map();
+    const currentUnread = conversationDoc.unreadCounts.get(receiverId) || 0;
+    conversationDoc.unreadCounts.set(receiverId, currentUnread + 1);
 
     await conversationDoc.save();
+
+    // mark delivered immediately if the receiver is online
+    if (req.io && req.socketUserMap) {
+      const receiverSocketId = req.socketUserMap.get(receiverId);
+
+      if (receiverSocketId) {
+        newMessage.messageStatus = "delivered";
+        newMessage.deliveredTo.push({ user: receiverId });
+        await newMessage.save();
+      }
+    }
 
     const populatedMessage = await Message.findById(newMessage._id)
       .populate("sender", "username profilePicture")
@@ -72,10 +92,17 @@ exports.sendMessage = async (req, res) => {
 
     if (req.io && req.socketUserMap) {
       const receiverSocketId = req.socketUserMap.get(receiverId);
+
       if (receiverSocketId) {
-        req.io.to(receiverSocketId).emit("receiver_message", populatedMessage);
-        message.messageStatus = "delivered";
-        await message.save();
+        req.io.to(receiverSocketId).emit("receive_message", populatedMessage);
+
+        const senderSocketId = req.socketUserMap.get(senderId);
+        if (senderSocketId) {
+          req.io.to(senderSocketId).emit("message_status_update", {
+            messageId: newMessage._id,
+            messageStatus: "delivered",
+          });
+        }
       }
     }
 
@@ -104,22 +131,26 @@ exports.getConversation = async (req, res) => {
       })
       .sort({ updatedAt: -1 });
 
-    return response(
-      res,
-      200,
-      "Conversations fetched successfully",
-      conversations,
-    );
+    const formatted = conversations.map((conv) => {
+      const obj = conv.toObject();
+      obj.unreadCount = conv.unreadCounts?.get(userId.toString()) || 0;
+      delete obj.unreadCounts;
+      return obj;
+    });
+
+    return response(res, 200, "Conversations fetched successfully", formatted);
   } catch (error) {
     console.error(error);
     return response(res, 500, "Internal server error");
   }
 };
 
-// ================= GET MESSAGES =================
+// ================= GET MESSAGES (paginated) =================
 exports.getMessage = async (req, res) => {
   const { conversationId } = req.params;
   const userId = req.user.userId;
+  const limit = Math.min(parseInt(req.query.limit) || 30, 100);
+  const before = req.query.before;
 
   try {
     const conversationDoc = await Conversation.findById(conversationId);
@@ -128,62 +159,106 @@ exports.getMessage = async (req, res) => {
       return response(res, 404, "Conversation not found");
     }
 
-    if (!conversationDoc.participants.includes(userId)) {
+    if (!conversationDoc.participants.map(String).includes(String(userId))) {
       return response(res, 403, "Unauthorized");
     }
 
-    const messages = await Message.find({ conversation: conversationId })
+    const query = { conversation: conversationId, deletedFor: { $ne: userId } };
+    if (before) {
+      query.createdAt = { $lt: new Date(before) };
+    }
+
+    const messages = await Message.find(query)
       .populate("sender", "username profilePicture")
       .populate("receiver", "username profilePicture")
-      .sort({ createdAt: 1 });
+      .sort({ createdAt: -1 })
+      .limit(limit);
 
-    // mark as read
-    await Message.updateMany(
-      {
-        conversation: conversationId,
-        receiver: userId,
-        messageStatus: { $in: ["sent", "delivered"] },
-      },
-      { $set: { messageStatus: "read" } },
+    // mark this user's incoming, unseen messages as seen
+    const toMarkSeen = messages.filter(
+      (m) =>
+        String(m.receiver?._id || m.receiver) === String(userId) &&
+        m.messageStatus !== "seen" &&
+        !m.seenBy.some((s) => String(s.user) === String(userId))
     );
 
-    conversationDoc.unreadCount = 0;
-    await conversationDoc.save();
+    if (toMarkSeen.length > 0) {
+      const ids = toMarkSeen.map((m) => m._id);
 
-    return response(res, 200, "Messages fetched successfully", messages);
+      await Message.updateMany(
+        { _id: { $in: ids } },
+        {
+          $set: { messageStatus: "seen" },
+          $push: { seenBy: { user: userId, at: new Date() } },
+        }
+      );
+
+      if (req.io && req.socketUserMap) {
+        for (const msg of toMarkSeen) {
+          const senderSocketId = req.socketUserMap.get(String(msg.sender._id || msg.sender));
+          if (senderSocketId) {
+            req.io.to(senderSocketId).emit("message_status_update", {
+              messageId: msg._id,
+              messageStatus: "seen",
+            });
+          }
+        }
+      }
+    }
+
+    if (conversationDoc.unreadCounts?.get(String(userId))) {
+      conversationDoc.unreadCounts.set(String(userId), 0);
+      await conversationDoc.save();
+    }
+
+    return response(res, 200, "Messages fetched successfully", messages.reverse());
   } catch (error) {
     console.error(error);
     return response(res, 500, "Internal server error");
   }
 };
 
-// ================= MARK AS READ =================
+// ================= MARK AS READ (SEEN) =================
 exports.markAsRead = async (req, res) => {
   const { messageIds } = req.body;
   const userId = req.user.userId;
 
-  try {
-    await Message.updateMany(
-      { _id: { $in: messageIds }, receiver: userId },
-      { $set: { messageStatus: "read" } },
-    );
-    // notify  to original sender
-    if (req.io && req.socketUserMap) {
-      for(const message of message){
-        const senderSocketId =req.socketUserMap.get(message.sender.toString());
-        if(senderSocketId){
-          const updatedMessage ={
-            _id:message._id,
-            messageStatus:"read",
+  if (!Array.isArray(messageIds) || messageIds.length === 0) {
+    return response(res, 400, "messageIds must be a non-empty array");
+  }
 
-          };
-          req.io.to(senderSocketId).emit("message_read",updatedMessage);
-          await message.save();
+  try {
+    const messages = await Message.find({
+      _id: { $in: messageIds },
+      receiver: userId,
+      messageStatus: { $ne: "seen" },
+    });
+
+    if (messages.length === 0) {
+      return response(res, 200, "No messages to update");
+    }
+
+    await Message.updateMany(
+      { _id: { $in: messages.map((m) => m._id) } },
+      {
+        $set: { messageStatus: "seen" },
+        $push: { seenBy: { user: userId, at: new Date() } },
+      }
+    );
+
+    if (req.io && req.socketUserMap) {
+      for (const msg of messages) {
+        const senderSocketId = req.socketUserMap.get(String(msg.sender));
+        if (senderSocketId) {
+          req.io.to(senderSocketId).emit("message_status_update", {
+            messageId: msg._id,
+            messageStatus: "seen",
+          });
         }
       }
     }
 
-    return response(res, 200, "Messages marked as read");
+    return response(res, 200, "Messages marked as seen");
   } catch (error) {
     console.error(error);
     return response(res, 500, "Internal server error");
@@ -193,7 +268,10 @@ exports.markAsRead = async (req, res) => {
 // ================= DELETE MESSAGE =================
 exports.deleteMessage = async (req, res) => {
   const { messageId } = req.params;
+  const { deleteForEveryone } = req.body;
   const userId = req.user.userId;
+
+  const DELETE_FOR_EVERYONE_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 
   try {
     const messageDoc = await Message.findById(messageId);
@@ -202,22 +280,109 @@ exports.deleteMessage = async (req, res) => {
       return response(res, 404, "Message not found");
     }
 
-    if (messageDoc.sender.toString() !== userId) {
+    const isParticipant =
+      String(messageDoc.sender) === String(userId) ||
+      String(messageDoc.receiver) === String(userId);
+
+    if (!isParticipant) {
       return response(res, 403, "Unauthorized");
     }
 
-    await Message.deleteOne({ _id: messageId });
+    if (deleteForEveryone) {
+      if (String(messageDoc.sender) !== String(userId)) {
+        return response(res, 403, "Only the sender can delete this message for everyone");
+      }
 
-    //  emit socket event
+      const age = Date.now() - messageDoc.createdAt.getTime();
+      if (age > DELETE_FOR_EVERYONE_WINDOW_MS) {
+        return response(res, 400, "Too late to delete this message for everyone");
+      }
 
-    if(req.io && req.socketUserMap){
-      const receiverSocketId = req.socketUserMap.get(message.receiver.toString())
-      if(receiverSocketId){
-        req.io.to(receiverSocketId).emit("messsage_deleted",messageId)
+      messageDoc.content = "";
+      messageDoc.imageOrVideoUrl = null;
+      messageDoc.isDeletedForEveryone = true;
+      await messageDoc.save();
+
+      if (req.io && req.socketUserMap) {
+        const otherUserId =
+          String(messageDoc.sender) === String(userId)
+            ? messageDoc.receiver
+            : messageDoc.sender;
+        const otherSocketId = req.socketUserMap.get(String(otherUserId));
+        if (otherSocketId) {
+          req.io.to(otherSocketId).emit("message_deleted", {
+            messageId: messageDoc._id,
+            deleteForEveryone: true,
+          });
+        }
+      }
+
+      return response(res, 200, "Message deleted for everyone");
+    }
+
+    if (!messageDoc.deletedFor.map(String).includes(String(userId))) {
+      messageDoc.deletedFor.push(userId);
+      await messageDoc.save();
+    }
+
+    return response(res, 200, "Message deleted for you");
+  } catch (error) {
+    console.error(error);
+    return response(res, 500, "Internal server error");
+  }
+};
+
+// ================= ADD / UPDATE REACTION =================
+exports.reactToMessage = async (req, res) => {
+  const { messageId } = req.params;
+  const { emoji } = req.body;
+  const userId = req.user.userId;
+
+  if (!emoji) {
+    return response(res, 400, "emoji is required");
+  }
+
+  try {
+    const messageDoc = await Message.findById(messageId);
+
+    if (!messageDoc) {
+      return response(res, 404, "Message not found");
+    }
+
+    const isParticipant =
+      String(messageDoc.sender) === String(userId) ||
+      String(messageDoc.receiver) === String(userId);
+
+    if (!isParticipant) {
+      return response(res, 403, "Unauthorized");
+    }
+
+    const existing = messageDoc.reactions.find((r) => String(r.user) === String(userId));
+
+    if (existing) {
+      existing.emoji = emoji; // replace previous reaction, like WhatsApp
+    } else {
+      messageDoc.reactions.push({ user: userId, emoji });
+    }
+
+    await messageDoc.save();
+
+    if (req.io && req.socketUserMap) {
+      const otherUserId =
+        String(messageDoc.sender) === String(userId)
+          ? messageDoc.receiver
+          : messageDoc.sender;
+      const otherSocketId = req.socketUserMap.get(String(otherUserId));
+      if (otherSocketId) {
+        req.io.to(otherSocketId).emit("message_reaction", {
+          messageId: messageDoc._id,
+          userId,
+          emoji,
+        });
       }
     }
 
-    return response(res, 200, "Message deleted successfully");
+    return response(res, 200, "Reaction updated", messageDoc.reactions);
   } catch (error) {
     console.error(error);
     return response(res, 500, "Internal server error");

@@ -14,6 +14,14 @@ const messageSchema = new mongoose.Schema(
       required: true,
     },
 
+    // Kept for 1-on-1 convenience (quick lookups, notifications) even
+    // though delivery/seen status is tracked per-participant below.
+    // For group chats this can be left unset.
+    receiver: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+
     content: {
       type: String,
       trim: true,
@@ -41,10 +49,46 @@ const messageSchema = new mongoose.Schema(
       },
     ],
 
+    // Overall status — for a 1-on-1 chat this is the single source of
+    // truth. For groups, use deliveredTo/seenBy below instead, and let
+    // this reflect the "weakest" status (sent until everyone has it).
     messageStatus: {
       type: String,
       enum: ["sent", "delivered", "seen"],
       default: "sent",
+    },
+
+    // Per-participant tracking — required for groups, and gives 1-on-1
+    // chats accurate "delivered"/"seen" timestamps too.
+    deliveredTo: [
+      {
+        user: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        at: { type: Date, default: Date.now },
+      },
+    ],
+
+    seenBy: [
+      {
+        user: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        at: { type: Date, default: Date.now },
+      },
+    ],
+
+    // WhatsApp's "delete for me" — hides the message for specific
+    // users without affecting anyone else's copy.
+    deletedFor: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
+
+    // WhatsApp's "delete for everyone" — message stays in the thread
+    // as a placeholder ("This message was deleted") but content/media
+    // is wiped.
+    isDeletedForEveryone: {
+      type: Boolean,
+      default: false,
     },
   },
   { timestamps: true }
