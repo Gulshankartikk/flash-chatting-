@@ -48,7 +48,7 @@ const conversationSchema = new mongoose.Schema(
       },
     ],
 
-    // WhatsApp's "mute" toggle, per-user — left as a flat array of
+    // flash chat "mute" toggle, per-user — left as a flat array of
     // userIds with an optional mutedUntil, simplest version.
     mutedBy: [
       {

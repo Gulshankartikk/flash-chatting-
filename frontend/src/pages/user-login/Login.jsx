@@ -260,11 +260,22 @@ export default function Login() {
         // Backend returns 400 on invalid/expired OTP and 200 on success —
         // axios throws on the 400, so we don't need to also inspect a
         // status string in the body. The catch block below handles it.
-        await axios.post(
+        const res = await axios.post(
           `${API_BASE}/verify-otp`,
           { ...userPhoneData, otp: code },
           { withCredentials: true }
         );
+
+        const verifiedUser = res.data?.data?.user ?? res.data?.user;
+        if (verifiedUser && verifiedUser.username && verifiedUser.agreed) {
+          setUser(verifiedUser);
+          setSuccess(true);
+          setTimeout(() => {
+            resetLoginState();
+            navigate("/");
+          }, 1800);
+          return;
+        }
       }
       setStep(3);
     } catch (err) {

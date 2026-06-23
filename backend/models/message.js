@@ -83,7 +83,7 @@ const messageSchema = new mongoose.Schema(
       },
     ],
 
-    // WhatsApp's "delete for everyone" — message stays in the thread
+    // flashchats "delete for everyone" — message stays in the thread
     // as a placeholder ("This message was deleted") but content/media
     // is wiped.
     isDeletedForEveryone: {

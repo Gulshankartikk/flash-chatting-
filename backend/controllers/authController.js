@@ -5,7 +5,7 @@ const response = require("../utils/responseHandler");
 const twilioService = require("../services/twilloService");
 const generateToken = require("../utils/generateToken");
 const { uploadFileToCloudinary } = require("../config/cloudinaryConfig");
-const Conversation = require("../models/Conversation");
+const Conversation = require("../models/conversation");
 const jwt = require("jsonwebtoken"); // ✅ moved to top-level
 
 // STEP 1 — SEND OTP
@@ -113,7 +113,15 @@ const verifyOtp = async (req, res) => {
       maxAge: 1000 * 60 * 60 * 24 * 365,
     });
 
-    return response(res, 200, "OTP verified successfully", { token, user });
+    // ✅ Tells the frontend whether this person already finished profile
+    // setup (returning user → go straight into the app) or hasn't set a
+    // username yet (first-time → still needs the profile-setup step).
+    // Without this, every login — new or returning — was being routed
+    // back through "set up your profile", overwriting the user's
+    // existing username/photo on every sign-in.
+    const isNewUser = !user.username;
+
+    return response(res, 200, "OTP verified successfully", { token, user, isNewUser });
   } catch (error) {
     console.error("verifyOtp error:", error);
     return response(res, 500, error.message || "Internal server error");
@@ -143,6 +151,12 @@ const updateProfile = async (req, res) => {
     await user.save();
     return response(res, 200, "Profile updated successfully", user);
   } catch (error) {
+    // Duplicate key on the unique username index — most likely two
+    // requests racing for the same name after both passed the
+    // client-side availability check.
+    if (error.code === 11000 && error.keyPattern?.username) {
+      return response(res, 409, "That username is already taken. Please choose another.");
+    }
     console.error("updateProfile error:", error);
     return response(res, 500, "Internal server error");
   }
@@ -252,6 +266,33 @@ const updateUserStatus = async (req, res) => {
   }
 };
 
+// CHECK USERNAME AVAILABILITY
+const checkUsernameAvailability = async (req, res) => {
+  const { username } = req.params;
+
+  if (!username || username.trim().length < 3) {
+    return response(res, 400, "Username must be at least 3 characters");
+  }
+
+  try {
+    const safe = username.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+    // Case-insensitive match so "Admin" and "admin" are treated as the
+    // same username — otherwise two people could register near-identical
+    // handles that only differ by case.
+    const existing = await User.findOne({
+      username: { $regex: `^${safe}$`, $options: "i" },
+    }).select("_id");
+
+    return response(res, 200, "Checked username availability", {
+      available: !existing,
+    });
+  } catch (error) {
+    console.error("checkUsernameAvailability error:", error);
+    return response(res, 500, "Internal server error");
+  }
+};
+
 module.exports = {
   sendOtp,
   verifyOtp,
@@ -260,4 +301,5 @@ module.exports = {
   checkAuthenticated,
   getAllUser,
   updateUserStatus,
+  checkUsernameAvailability,
 };

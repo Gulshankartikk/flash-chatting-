@@ -165,7 +165,7 @@ const ChatWindow = ({ selectedContact, setSelectedContact, isMobile }) => {
 
       {/* Pinned Message Indicator Banner */}
       {pinnedMessage && (
-        <div className="bg-[#1c1c1c] border-b border-[#222222] px-4 py-2 flex items-center justify-between text-xs text-[#A0A0A0] gap-3">
+        <div className="bg-slate-50 dark:bg-[#1c1c1c] border-b border-slate-200 dark:border-[#222222] px-4 py-2 flex items-center justify-between text-xs text-slate-400 dark:text-[#A0A0A0] gap-3">
           <div
             className="flex items-center gap-2 cursor-pointer flex-1 min-w-0"
             onClick={() => {
@@ -180,7 +180,7 @@ const ChatWindow = ({ selectedContact, setSelectedContact, isMobile }) => {
             }}
           >
             <Pin size={12} className="text-[#FFD166] rotate-45 flex-shrink-0" />
-            <span className="font-semibold text-white flex-shrink-0">Pinned Message:</span>
+            <span className="font-semibold text-slate-800 dark:text-white flex-shrink-0">Pinned Message:</span>
             <span className="truncate flex-1">{pinnedMessage.content || "Media"}</span>
           </div>
           <button
@@ -229,10 +229,10 @@ const ChatWindow = ({ selectedContact, setSelectedContact, isMobile }) => {
       {/* Forward Message Modal */}
       {forwardingMsg && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
-          <div className="w-full max-w-sm bg-[#111111] border border-[#222222] rounded-2xl p-6 shadow-2xl flex flex-col max-h-[80vh]">
-            <h3 className="text-white font-bold text-base border-b border-[#222222] pb-3 mb-4 text-left">Forward Message</h3>
+          <div className="w-full max-w-sm bg-white dark:bg-[#111111] border border-slate-200 dark:border-[#222222] rounded-2xl p-6 shadow-2xl flex flex-col max-h-[80vh]">
+            <h3 className="text-slate-800 dark:text-white font-bold text-base border-b border-slate-200 dark:border-[#222222] pb-3 mb-4 text-left">Forward Message</h3>
             
-            <div className="overflow-y-auto flex-1 divide-y divide-[#222222] mb-4">
+            <div className="overflow-y-auto flex-1 divide-y divide-slate-100 dark:divide-[#222222] mb-4">
               {contacts.map((contact) => {
                 const isChecked = forwardTargets.includes(contact._id);
                 return (
@@ -240,10 +240,10 @@ const ChatWindow = ({ selectedContact, setSelectedContact, isMobile }) => {
                     key={contact._id}
                     onClick={() => {
                       setForwardTargets(prev =>
-                        isChecked ? prev.filter(id => id !== contact._id) : [...prev, contact._id]
+                      isChecked ? prev.filter(id => id !== contact._id) : [...prev, contact._id]
                       );
                     }}
-                    className="flex items-center gap-3 py-3 cursor-pointer hover:bg-[#1c1c1c] px-2 rounded-xl transition-colors"
+                    className="flex items-center gap-3 py-3 cursor-pointer hover:bg-slate-100 dark:hover:bg-[#1c1c1c] px-2 rounded-xl transition-colors"
                   >
                     <input
                       type="checkbox"
@@ -254,9 +254,9 @@ const ChatWindow = ({ selectedContact, setSelectedContact, isMobile }) => {
                     <img
                       src={contact.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(contact.name)}&background=25D366&color=fff`}
                       alt=""
-                      className="w-9 h-9 rounded-full object-cover border border-[#222222]"
+                      className="w-9 h-9 rounded-full object-cover border border-slate-200 dark:border-[#222222]"
                     />
-                    <span className="text-sm font-semibold text-white text-left truncate flex-1">{contact.name}</span>
+                    <span className="text-sm font-semibold text-slate-800 dark:text-white text-left truncate flex-1">{contact.name}</span>
                   </div>
                 );
               })}
@@ -268,7 +268,7 @@ const ChatWindow = ({ selectedContact, setSelectedContact, isMobile }) => {
                   setForwardingMsg(null);
                   setForwardTargets([]);
                 }}
-                className="flex-1 py-2.5 border border-[#222222] hover:bg-[#222222] text-white rounded-xl text-xs font-semibold"
+                className="flex-1 py-2.5 border border-slate-200 dark:border-[#222222] hover:bg-slate-100 dark:hover:bg-[#222222] text-slate-800 dark:text-white rounded-xl text-xs font-semibold"
               >
                 Cancel
               </button>

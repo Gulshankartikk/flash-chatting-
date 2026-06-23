@@ -18,10 +18,10 @@ const ConversationItem = ({
   return (
     <div
       onClick={onClick}
-      className={`flex items-center gap-3 p-3.5 cursor-pointer border-b border-[#222222] transition-all relative ${
+      className={`flex items-center gap-3 p-3.5 cursor-pointer border-b border-slate-200 dark:border-[#222222] transition-all relative ${
         isActive
-          ? "bg-[#1c1c1c] border-l-4 border-[#FF6B00]"
-          : "hover:bg-[#111111]/60 bg-transparent"
+          ? "bg-slate-100 dark:bg-[#1c1c1c] border-l-4 border-[#FF6B00]"
+          : "hover:bg-slate-50 dark:hover:bg-[#111111]/60 bg-transparent"
       }`}
     >
       {/* Avatar Container with live status */}
@@ -30,10 +30,10 @@ const ConversationItem = ({
           <img
             src={avatar}
             alt={name}
-            className="w-11 h-11 rounded-full object-cover border border-[#222222]"
+            className="w-11 h-11 rounded-full object-cover border border-slate-200 dark:border-[#222222]"
           />
         ) : (
-          <div className="w-11 h-11 rounded-full bg-[#222222] text-[#FFFFFF] flex items-center justify-center font-bold text-sm">
+          <div className="w-11 h-11 rounded-full bg-slate-100 dark:bg-[#222222] text-slate-800 dark:text-[#FFFFFF] flex items-center justify-center font-bold text-sm">
             {name.charAt(0).toUpperCase()}
           </div>
         )}
@@ -45,11 +45,11 @@ const ConversationItem = ({
       {/* Detail Block */}
       <div className="flex-1 text-left min-w-0">
         <div className="flex justify-between items-baseline gap-1">
-          <h4 className="text-sm font-semibold text-[#FFFFFF] truncate">
+          <h4 className="text-sm font-semibold text-slate-800 dark:text-[#FFFFFF] truncate">
             {name}
           </h4>
           {item.lastMessageTime && (
-            <span className="text-[10px] text-[#A0A0A0]">
+            <span className="text-[10px] text-slate-400 dark:text-[#A0A0A0]">
               {new Date(item.lastMessageTime).toLocaleTimeString([], {
                 hour: "2-digit",
                 minute: "2-digit",
@@ -61,7 +61,7 @@ const ConversationItem = ({
           {item.lastMessageMine && (
             <StatusTick status={item.lastMessageStatus} />
           )}
-          <p className="text-xs text-[#A0A0A0] truncate flex-1">
+          <p className="text-xs text-slate-400 dark:text-[#A0A0A0] truncate flex-1">
             {lastMsg}
           </p>
         </div>

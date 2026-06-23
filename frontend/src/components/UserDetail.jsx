@@ -40,16 +40,16 @@ const UserDetail = () => {
   const [isMuted, setIsMuted] = useState(false);
   const [confirmAction, setConfirmAction] = useState(null); // "block" | "report" | null
 
-  // ---- Premium Dark palette tokens ----
-  const ink = "#FFFFFF";
-  const sub = "#A0A0A0";
+  // ---- Premium Theme palette tokens ----
+  const ink = dark ? "#FFFFFF" : "#1e293b"; // slate-800
+  const sub = dark ? "#A0A0A0" : "#64748b"; // slate-500
   const accent = "#FF6B00";
   const danger = "#FF3D71";
-  const border = "#222222";
-  const panelBg = "#000000";
-  const headerBg = "#111111";
-  const rowBg = "#1c1c1c";
-  const dialogBg = "#1c1c1c";
+  const border = dark ? "#222222" : "#e2e8f0"; // slate-200
+  const panelBg = dark ? "#000000" : "#ffffff";
+  const headerBg = dark ? "#111111" : "#f8fafc"; // slate-50
+  const rowBg = dark ? "#1c1c1c" : "#f1f5f9"; // slate-100
+  const dialogBg = dark ? "#1c1c1c" : "#ffffff";
 
   if (!selectedContact) {
     return (
@@ -122,7 +122,7 @@ const UserDetail = () => {
           gap: 12,
           padding: "14px 16px",
           background: headerBg,
-          color: "#FFFFFF",
+          color: ink,
         }}
       >
         <button

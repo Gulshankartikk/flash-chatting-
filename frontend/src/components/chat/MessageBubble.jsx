@@ -148,7 +148,7 @@ const MessageBubble = ({
               ? "bg-transparent shadow-none"
               : isMine
               ? "bg-[#FF6B00] text-[#FFFFFF] rounded-tr-none shadow-md"
-              : "bg-[#1c1c1c] text-[#FFFFFF] rounded-tl-none shadow-md"
+              : "bg-slate-100 dark:bg-[#1c1c1c] text-slate-800 dark:text-[#FFFFFF] rounded-tl-none shadow-md"
           }`}
           onContextMenu={(e) => {
             e.preventDefault();
@@ -172,7 +172,7 @@ const MessageBubble = ({
                 value={editText}
                 onChange={(e) => setEditText(e.target.value)}
                 rows={2}
-                className="w-full p-2 bg-black text-[#FFFFFF] border border-[#222222] focus:border-[#FF6B00] rounded-xl text-xs outline-none resize-none"
+                className="w-full p-2 bg-slate-50 dark:bg-black text-slate-800 dark:text-[#FFFFFF] border border-slate-200 dark:border-[#222222] focus:border-[#FF6B00] rounded-xl text-xs outline-none resize-none"
               />
               <div className="flex justify-end gap-1.5">
                 <button
@@ -242,12 +242,12 @@ const MessageBubble = ({
               )}
 
               {isDocument && msg.imageOrVideoUrl && (
-                <div className="rounded p-3 mb-2 max-w-xs bg-black/40 border border-[#222222] flex items-center gap-3">
+                <div className="rounded p-3 mb-2 max-w-xs bg-slate-50/50 dark:bg-black/40 border border-slate-200 dark:border-[#222222] flex items-center gap-3">
                   <div className="p-2.5 bg-[#FF6B00]/15 text-[#FF6B00] rounded-xl flex-shrink-0">
                     <FileText size={20} />
                   </div>
                   <div className="flex-1 text-left min-w-0">
-                    <p className="text-xs font-semibold text-white truncate">
+                    <p className="text-xs font-semibold text-slate-800 dark:text-white truncate">
                       {msg.content || getFileName(msg.imageOrVideoUrl)}
                     </p>
                     <a
@@ -285,7 +285,7 @@ const MessageBubble = ({
 
           {/* Reactions Overlay */}
           {reactionList.length > 0 && !isEditing && (
-            <div className="absolute -bottom-2.5 right-2 flex gap-1 bg-[#1c1c1c] border border-[#222222] rounded-full px-1.5 py-0.5 shadow-lg">
+            <div className="absolute -bottom-2.5 right-2 flex gap-1 bg-white dark:bg-[#1c1c1c] border border-slate-200 dark:border-[#222222] rounded-full px-1.5 py-0.5 shadow-lg">
               {reactionList.map((r) => (
                 <button
                   key={r.emoji}
@@ -304,21 +304,21 @@ const MessageBubble = ({
           <div className="flex items-center gap-1">
             <button
               onClick={() => setPickerOpen(true)}
-              className="p-1.5 hover:bg-[#1c1c1c] rounded-full text-[#A0A0A0] hover:text-[#FFFFFF] transition-colors"
+              className="p-1.5 hover:bg-slate-100 dark:hover:bg-[#1c1c1c] rounded-full text-slate-400 dark:text-[#A0A0A0] hover:text-slate-800 dark:hover:text-[#FFFFFF] transition-colors"
               title="Add reaction"
             >
               <Smile size={14} />
             </button>
             <button
               onClick={() => onReply && onReply(msg)}
-              className="p-1.5 hover:bg-[#1c1c1c] rounded-full text-[#A0A0A0] hover:text-[#FFFFFF] transition-colors"
+              className="p-1.5 hover:bg-slate-100 dark:hover:bg-[#1c1c1c] rounded-full text-slate-400 dark:text-[#A0A0A0] hover:text-slate-800 dark:hover:text-[#FFFFFF] transition-colors"
               title="Reply"
             >
               <Reply size={14} />
             </button>
             <button
               onClick={() => setContextMenuOpen(true)}
-              className="p-1.5 hover:bg-[#1c1c1c] rounded-full text-[#A0A0A0] hover:text-[#FFFFFF] transition-colors"
+              className="p-1.5 hover:bg-slate-100 dark:hover:bg-[#1c1c1c] rounded-full text-slate-400 dark:text-[#A0A0A0] hover:text-slate-800 dark:hover:text-[#FFFFFF] transition-colors"
               title="More"
             >
               <MoreHorizontal size={14} />
@@ -330,7 +330,7 @@ const MessageBubble = ({
         {pickerOpen && (
           <div
             ref={pickerRef}
-            className="absolute bottom-full mb-2 bg-[#1c1c1c] border border-[#222222] rounded-full py-1 px-3 flex gap-2.5 shadow-xl z-20"
+            className="absolute bottom-full mb-2 bg-white dark:bg-[#1c1c1c] border border-slate-200 dark:border-[#222222] rounded-full py-1 px-3 flex gap-2.5 shadow-xl z-20"
             style={{ [isMine ? "right" : "left"]: 0 }}
           >
             {QUICK_REACTIONS.map((emoji) => (
@@ -349,12 +349,12 @@ const MessageBubble = ({
         {contextMenuOpen && (
           <div
             ref={menuRef}
-            className="absolute bottom-full mb-2 bg-[#1c1c1c] border border-[#222222] rounded-lg py-1 flex flex-col shadow-2xl w-36 z-25 text-left"
+            className="absolute bottom-full mb-2 bg-white dark:bg-[#1c1c1c] border border-slate-200 dark:border-[#222222] rounded-lg py-1 flex flex-col shadow-2xl w-36 z-25 text-left"
             style={{ [isMine ? "right" : "left"]: 0 }}
           >
             <button
               onClick={handleCopy}
-              className="flex items-center gap-2 px-3 py-2 text-xs text-[#FFFFFF] hover:bg-[#222222] transition-colors w-full"
+              className="flex items-center gap-2 px-3 py-2 text-xs text-slate-800 dark:text-[#FFFFFF] hover:bg-slate-100 dark:hover:bg-[#222222] transition-colors w-full"
             >
               <Copy size={12} /> Copy Message
             </button>
@@ -363,7 +363,7 @@ const MessageBubble = ({
                 if (onForward) onForward(msg);
                 setContextMenuOpen(false);
               }}
-              className="flex items-center gap-2 px-3 py-2 text-xs text-[#FFFFFF] hover:bg-[#222222] transition-colors w-full"
+              className="flex items-center gap-2 px-3 py-2 text-xs text-slate-800 dark:text-[#FFFFFF] hover:bg-slate-100 dark:hover:bg-[#222222] transition-colors w-full"
             >
               <Forward size={12} /> Forward
             </button>
@@ -374,7 +374,7 @@ const MessageBubble = ({
                   setEditText(msg.content || msg.message || "");
                   setContextMenuOpen(false);
                 }}
-                className="flex items-center gap-2 px-3 py-2 text-xs text-[#FFFFFF] hover:bg-[#222222] transition-colors w-full"
+                className="flex items-center gap-2 px-3 py-2 text-xs text-slate-800 dark:text-[#FFFFFF] hover:bg-slate-100 dark:hover:bg-[#222222] transition-colors w-full"
               >
                 <Edit2 size={12} /> Edit Message
               </button>
@@ -384,7 +384,7 @@ const MessageBubble = ({
                 if (onPin) onPin(msg);
                 setContextMenuOpen(false);
               }}
-              className="flex items-center gap-2 px-3 py-2 text-xs text-[#FFFFFF] hover:bg-[#222222] transition-colors w-full"
+              className="flex items-center gap-2 px-3 py-2 text-xs text-slate-800 dark:text-[#FFFFFF] hover:bg-slate-100 dark:hover:bg-[#222222] transition-colors w-full"
             >
               <Pin size={12} className="rotate-45" /> {msg.isPinned ? "Unpin Message" : "Pin Message"}
             </button>
@@ -393,7 +393,7 @@ const MessageBubble = ({
                 if (onDelete) onDelete(msg, "me");
                 setContextMenuOpen(false);
               }}
-              className="flex items-center gap-2 px-3 py-2 text-xs text-[#FF9E00] hover:bg-[#222222] transition-colors w-full"
+              className="flex items-center gap-2 px-3 py-2 text-xs text-[#FF9E00] hover:bg-slate-100 dark:hover:bg-[#222222] transition-colors w-full"
             >
               <Trash2 size={12} /> Delete for Me
             </button>
@@ -403,7 +403,7 @@ const MessageBubble = ({
                   if (onDelete) onDelete(msg, "everyone");
                   setContextMenuOpen(false);
                 }}
-                className="flex items-center gap-2 px-3 py-2 text-xs text-[#FF3D71] hover:bg-[#222222] transition-colors w-full"
+                className="flex items-center gap-2 px-3 py-2 text-xs text-[#FF3D71] hover:bg-slate-100 dark:hover:bg-[#222222] transition-colors w-full"
               >
                 <Trash2 size={12} /> Delete for All
               </button>

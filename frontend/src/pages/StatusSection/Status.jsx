@@ -151,9 +151,9 @@ const Status = () => {
   const glowAccent = "#FFD166";
 
   return (
-    <div className="h-full overflow-y-auto bg-[#000000] text-[#FFFFFF] font-sans">
+    <div className="h-full overflow-y-auto bg-white dark:bg-[#000000] text-slate-800 dark:text-[#FFFFFF] font-sans">
       {/* Header */}
-      <div className="p-4 border-b border-[#222222] bg-[#111111] sticky top-0 z-10">
+      <div className="p-4 border-b border-slate-200 dark:border-[#222222] bg-slate-50 dark:bg-[#111111] sticky top-0 z-10">
         <h2 className="text-xl font-bold text-left">Status</h2>
       </div>
 
@@ -171,7 +171,7 @@ const Status = () => {
               })
             : setShowCreateForm(true)
         }
-        className="flex items-center gap-4 p-4 cursor-pointer border-b border-[#222222] hover:bg-[#1c1c1c] transition-colors"
+        className="flex items-center gap-4 p-4 cursor-pointer border-b border-slate-200 dark:border-[#222222] hover:bg-slate-100 dark:hover:bg-[#1c1c1c] transition-colors"
       >
         <div className="relative flex-shrink-0">
           {myStatusUpdates.length > 0 ? (
@@ -191,7 +191,7 @@ const Status = () => {
               e.stopPropagation();
               setShowCreateForm(true);
             }}
-            className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full text-white flex items-center justify-center text-xs font-bold border-2 border-[#000000] bg-[#FF6B00]"
+            className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full text-white flex items-center justify-center text-xs font-bold border-2 border-white dark:border-[#000000] bg-[#FF6B00]"
             aria-label="Add status"
           >
             +
@@ -199,7 +199,7 @@ const Status = () => {
         </div>
         <div className="text-left">
           <p className="font-semibold text-sm">My status</p>
-          <p className="text-xs text-[#A0A0A0] mt-0.5">
+          <p className="text-xs text-slate-400 dark:text-[#A0A0A0] mt-0.5">
             {myStatusUpdates.length > 0 ? "Tap to view" : "Tap to add status update"}
           </p>
         </div>
@@ -207,7 +207,7 @@ const Status = () => {
 
       {/* Recent updates */}
       {recent.length > 0 && (
-        <p className="px-4 pt-5 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-[#A0A0A0] text-left">
+        <p className="px-4 pt-5 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-[#A0A0A0] text-left">
           Recent updates
         </p>
       )}
@@ -222,7 +222,7 @@ const Status = () => {
 
       {/* Viewed updates */}
       {viewed.length > 0 && (
-        <p className="px-4 pt-5 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-[#A0A0A0] text-left">
+        <p className="px-4 pt-5 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-[#A0A0A0] text-left">
           Viewed updates
         </p>
       )}
@@ -236,7 +236,7 @@ const Status = () => {
       ))}
 
       {statuses.length === 0 && myStatusUpdates.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-20 px-6 text-center text-[#A0A0A0]">
+        <div className="flex flex-col items-center justify-center py-20 px-6 text-center text-slate-400 dark:text-[#A0A0A0]">
           <div className="text-5xl mb-3">🔒</div>
           <p className="text-sm font-semibold">No status updates yet.</p>
           <p className="text-xs opacity-75 mt-0.5">Updates from your contacts will show up here.</p>
@@ -269,12 +269,12 @@ const Avatar = ({ text, src, size = 44 }) => (
     <img
       src={src}
       alt=""
-      className="rounded-full object-cover border border-[#222222]"
+      className="rounded-full object-cover border border-slate-200 dark:border-[#222222]"
       style={{ width: size, height: size }}
     />
   ) : (
     <div
-      className="rounded-full flex items-center justify-center font-bold bg-[#1c1c1c] border border-[#222222] text-[#FFFFFF]"
+      className="rounded-full flex items-center justify-center font-bold bg-slate-100 dark:bg-[#1c1c1c] border border-slate-200 dark:border-[#222222] text-slate-700 dark:text-[#FFFFFF]"
       style={{ width: size, height: size, fontSize: size * 0.36 }}
     >
       {text}
@@ -327,14 +327,14 @@ const StatusRing = ({ segments, viewed, accent, size = 48, children }) => {
 const StatusRow = ({ contact, accent, onClick }) => (
   <div
     onClick={onClick}
-    className="flex items-center gap-4 p-4 cursor-pointer border-b border-[#222222] hover:bg-[#1c1c1c] transition-colors"
+    className="flex items-center gap-4 p-4 cursor-pointer border-b border-slate-200 dark:border-[#222222] hover:bg-slate-100 dark:hover:bg-[#1c1c1c] transition-colors"
   >
     <StatusRing segments={contact.updates.length} viewed={contact.viewed} accent={accent} size={48}>
       <Avatar text={contact.avatarText} src={contact.profilePic} size={44} />
     </StatusRing>
     <div className="text-left">
       <p className="font-semibold text-sm">{contact.name}</p>
-      <p className="text-xs text-[#A0A0A0] mt-0.5">
+      <p className="text-xs text-slate-400 dark:text-[#A0A0A0] mt-0.5">
         {contact.updates[contact.updates.length - 1]?.time}
       </p>
     </div>
@@ -557,24 +557,24 @@ const StatusViewer = ({ contact, onClose, onDelete, onView }) => {
       {/* Viewer List Modal */}
       {showViewerList && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-[#111111] rounded-t-3xl p-6 border-t border-[#222222] shadow-2xl max-h-[70vh] flex flex-col">
-            <div className="flex items-center justify-between border-b border-[#222222] pb-3 mb-4">
-              <h3 className="font-bold text-base text-white">Viewed by ({current.viewers?.length || 0})</h3>
+          <div className="w-full max-w-md bg-white dark:bg-[#111111] rounded-t-3xl p-6 border-t border-slate-200 dark:border-[#222222] shadow-2xl max-h-[70vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#222222] pb-3 mb-4">
+              <h3 className="font-bold text-base text-slate-800 dark:text-white">Viewed by ({current.viewers?.length || 0})</h3>
               <button
                 onClick={() => setShowViewerList(false)}
-                className="text-white hover:text-[#FF6B00] text-xl font-bold"
+                className="text-slate-800 dark:text-white hover:text-[#FF6B00] text-xl font-bold"
               >
                 ×
               </button>
             </div>
             
-            <div className="overflow-y-auto flex-1 divide-y divide-[#222222]">
+            <div className="overflow-y-auto flex-1 divide-y divide-slate-200 dark:divide-[#222222]">
               {current.viewers && current.viewers.length > 0 ? (
                 current.viewers.map((viewer) => (
                   <div key={viewer._id} className="flex items-center gap-3.5 py-3">
                     <Avatar text={viewer.username?.charAt(0).toUpperCase()} src={viewer.profilePicture} size={36} />
                     <div className="text-left flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-white truncate">{viewer.username}</p>
+                      <p className="text-sm font-semibold text-slate-800 dark:text-white truncate">{viewer.username}</p>
                     </div>
                   </div>
                 ))
@@ -641,10 +641,10 @@ const CreateStatusForm = ({ onClose, onSubmit }) => {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center px-4">
-      <div className="w-full max-w-sm rounded-2xl p-5 shadow-2xl bg-[#1c1c1c] border border-[#222222] text-[#FFFFFF]">
+      <div className="w-full max-w-sm rounded-2xl p-5 shadow-2xl bg-white dark:bg-[#1c1c1c] border border-slate-200 dark:border-[#222222] text-slate-800 dark:text-[#FFFFFF]">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-sm">Add Status Update</h3>
-          <button onClick={onClose} className="text-xl leading-none text-[#A0A0A0] hover:text-[#FF9E00]" aria-label="Close">
+          <button onClick={onClose} className="text-xl leading-none text-slate-400 dark:text-[#A0A0A0] hover:text-[#FF9E00]" aria-label="Close">
             ×
           </button>
         </div>
@@ -652,9 +652,9 @@ const CreateStatusForm = ({ onClose, onSubmit }) => {
         {filePreview ? (
           <div className="mb-4 relative">
             {fileType === "image" ? (
-              <img src={filePreview} alt="Preview" className="w-full h-48 object-cover rounded-lg border border-[#222222]" />
+              <img src={filePreview} alt="Preview" className="w-full h-48 object-cover rounded-lg border border-slate-200 dark:border-[#222222]" />
             ) : (
-              <video src={filePreview} controls className="w-full h-48 object-cover rounded-lg border border-[#222222]" />
+              <video src={filePreview} controls className="w-full h-48 object-cover rounded-lg border border-slate-200 dark:border-[#222222]" />
             )}
             <button
               onClick={handleCancelFile}
@@ -670,7 +670,7 @@ const CreateStatusForm = ({ onClose, onSubmit }) => {
           onChange={(e) => setText(e.target.value)}
           placeholder={selectedFile ? "Add a caption..." : "Write status message..."}
           rows={3}
-          className="w-full p-3 rounded-xl outline-none resize-none mb-4 bg-black text-[#FFFFFF] placeholder-[#555555] border border-[#222222] focus:border-[#FF6B00] text-sm"
+          className="w-full p-3 rounded-xl outline-none resize-none mb-4 bg-slate-50 dark:bg-black text-slate-800 dark:text-[#FFFFFF] placeholder-slate-400 dark:placeholder-[#555555] border border-slate-200 dark:border-[#222222] focus:border-[#FF6B00] text-sm"
         />
 
         <input
@@ -684,7 +684,7 @@ const CreateStatusForm = ({ onClose, onSubmit }) => {
         <div className="flex gap-3">
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="flex-1 py-2.5 rounded-xl border border-[#222222] text-xs hover:bg-[#222222] transition-colors flex items-center justify-center gap-1.5"
+            className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-[#222222] text-xs hover:bg-slate-100 dark:hover:bg-[#222222] text-slate-700 dark:text-white transition-colors flex items-center justify-center gap-1.5"
           >
             <Image size={14} className="text-[#00E676]" /> Photo / Video
           </button>

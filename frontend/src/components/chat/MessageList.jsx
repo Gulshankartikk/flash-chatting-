@@ -100,13 +100,22 @@ const MessageList = ({
   }, []);
 
   return (
-    <div className="flex-1 relative overflow-hidden bg-[#000000]">
+    <div className="flex-1 relative overflow-hidden bg-white dark:bg-[#000000]">
       {/* Scrollable Container */}
       <div
         ref={containerRef}
         onScroll={handleScroll}
         className="h-full overflow-y-auto px-4 py-6 flex flex-col gap-1.5"
       >
+        {/* End-to-End Encryption Banner */}
+        <div className="flex justify-center my-2">
+          <div className="bg-[#FFD166]/10 border border-[#FFD166]/20 rounded-xl px-4 py-2.5 max-w-xs text-center shadow-sm">
+            <p className="text-[11px] text-slate-500 dark:text-[#A0A0A0] leading-relaxed">
+              🔒 Messages and calls are end-to-end encrypted. No one outside of this chat, not even Flash Chat, can read or listen to them.
+            </p>
+          </div>
+        </div>
+
         {isLoadingMore && (
           <div className="flex justify-center py-2">
             <div className="w-5 h-5 border-2 border-[#FF6B00] border-t-transparent rounded-full animate-spin" />
@@ -117,7 +126,7 @@ const MessageList = ({
           <React.Fragment key={group.key}>
             {/* Day Divider */}
             <div className="flex justify-center my-3.5">
-              <span className="text-[10px] uppercase font-bold tracking-wider text-[#A0A0A0] bg-[#1c1c1c] border border-[#222222] rounded-full px-3 py-1 shadow-sm">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500 dark:text-[#A0A0A0] bg-slate-100 dark:bg-[#1c1c1c] border border-slate-200 dark:border-[#222222] rounded-full px-3 py-1 shadow-sm">
                 {group.label}
               </span>
             </div>

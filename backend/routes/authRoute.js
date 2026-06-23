@@ -9,6 +9,7 @@ router.post('/send-otp', authController.sendOtp);
 router.post('/verify-otp', authController.verifyOtp);
 router.get('/logout', authController.logout);
 router.post('/logout', authController.logout);
+router.get('/check-username/:username', authController.checkUsernameAvailability);
 
 // Protected routes
 router.put(
@@ -24,7 +25,7 @@ router.get(
 );
 
 router.get(
-  '/users',authMiddleware,
+  '/users', authMiddleware,
   authController.getAllUser
 )
 

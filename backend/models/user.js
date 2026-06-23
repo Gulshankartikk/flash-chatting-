@@ -5,7 +5,7 @@ const userSchema = new mongoose.Schema(
     phoneNumber: { type: String, unique: true, sparse: true },
     phoneSuffix: { type: String }, // country code, e.g. "+91"
 
-    username: { type: String },
+    username: { type: String, unique: true, sparse: true },
 
     email: {
       type: String,
@@ -56,8 +56,7 @@ const userSchema = new mongoose.Schema(
       },
     ],
 
-    // Privacy controls, mirroring WhatsApp's settings screen. Each
-    // defaults to the most common WhatsApp default ("everyone").
+
     privacySettings: {
       lastSeen: {
         type: String,

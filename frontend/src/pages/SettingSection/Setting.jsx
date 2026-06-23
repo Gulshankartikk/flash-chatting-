@@ -113,9 +113,9 @@ const Setting = () => {
 
   if (isEditingProfile) {
     return (
-      <div className="h-full overflow-y-auto bg-[#000000] text-[#FFFFFF] font-sans flex flex-col">
+      <div className="h-full overflow-y-auto bg-white dark:bg-[#000000] text-slate-800 dark:text-[#FFFFFF] font-sans flex flex-col">
         {/* Header */}
-        <div className="p-4 border-b border-[#222222] bg-[#111111] flex items-center gap-3 sticky top-0 z-10">
+        <div className="p-4 border-b border-slate-200 dark:border-[#222222] bg-slate-50 dark:bg-[#111111] flex items-center gap-3 sticky top-0 z-10">
           <button
             onClick={() => {
               setIsEditingProfile(false);
@@ -124,7 +124,7 @@ const Setting = () => {
               setSelectedFile(null);
               setPreviewUrl(currentUser?.profilePicture || "");
             }}
-            className="text-[#FF6B00] hover:text-[#E05E00] text-xl font-bold flex items-center justify-center w-8 h-8 rounded-full hover:bg-[#222222] transition-colors"
+            className="text-[#FF6B00] hover:text-[#E05E00] text-xl font-bold flex items-center justify-center w-8 h-8 rounded-full hover:bg-slate-100 dark:hover:bg-[#222222] transition-colors"
           >
             ←
           </button>
@@ -178,7 +178,7 @@ const Setting = () => {
                 />
               </label>
             </div>
-            <p className="text-xs text-[#A0A0A0]">Upload JPG, PNG or GIF</p>
+            <p className="text-xs text-slate-400 dark:text-[#A0A0A0]">Upload JPG, PNG or GIF</p>
           </div>
 
           {/* Feedback Messages */}
@@ -197,7 +197,7 @@ const Setting = () => {
           <div className="flex flex-col gap-4 text-left">
             {/* Username */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] font-bold uppercase tracking-wider text-[#A0A0A0]">
+              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-[#A0A0A0]">
                 Username
               </label>
               <input
@@ -205,13 +205,13 @@ const Setting = () => {
                 value={editUsername}
                 onChange={(e) => setEditUsername(e.target.value)}
                 placeholder="Enter username"
-                className="bg-[#111111] border border-[#222222] rounded-xl p-3 text-sm focus:border-[#FF6B00] outline-none text-[#FFFFFF] w-full transition-colors"
+                className="bg-slate-50 dark:bg-[#111111] border border-slate-200 dark:border-[#222222] rounded-xl p-3 text-sm focus:border-[#FF6B00] outline-none text-slate-800 dark:text-[#FFFFFF] w-full transition-colors"
               />
             </div>
 
             {/* About / Bio */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] font-bold uppercase tracking-wider text-[#A0A0A0]">
+              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-[#A0A0A0]">
                 About / Bio
               </label>
               <textarea
@@ -219,27 +219,27 @@ const Setting = () => {
                 onChange={(e) => setEditAbout(e.target.value)}
                 placeholder="Tell us about yourself"
                 rows={3}
-                className="bg-[#111111] border border-[#222222] rounded-xl p-3 text-sm focus:border-[#FF6B00] outline-none text-[#FFFFFF] w-full resize-none transition-colors"
+                className="bg-slate-50 dark:bg-[#111111] border border-slate-200 dark:border-[#222222] rounded-xl p-3 text-sm focus:border-[#FF6B00] outline-none text-slate-800 dark:text-[#FFFFFF] w-full resize-none transition-colors"
               />
             </div>
 
             {/* Read-only account info */}
-            <div className="mt-2 border-t border-[#222222] pt-4 flex flex-col gap-3">
+            <div className="mt-2 border-t border-slate-200 dark:border-[#222222] pt-4 flex flex-col gap-3">
               <div className="flex justify-between items-center py-1">
-                <span className="text-xs text-[#A0A0A0]">Email</span>
-                <span className="text-xs text-white font-medium">{currentUser?.email || "Not set"}</span>
+                <span className="text-xs text-slate-400 dark:text-[#A0A0A0]">Email</span>
+                <span className="text-xs text-slate-800 dark:text-white font-medium">{currentUser?.email || "Not set"}</span>
               </div>
               <div className="flex justify-between items-center py-1">
-                <span className="text-xs text-[#A0A0A0]">Phone number</span>
-                <span className="text-xs text-white font-medium">
+                <span className="text-xs text-slate-400 dark:text-[#A0A0A0]">Phone number</span>
+                <span className="text-xs text-slate-800 dark:text-white font-medium">
                   {currentUser?.phoneNumber
                     ? `${currentUser?.phoneSuffix || ""} ${currentUser?.phoneNumber}`
                     : "Not set"}
                 </span>
               </div>
               <div className="flex justify-between items-center py-1">
-                <span className="text-xs text-[#A0A0A0]">Joined date</span>
-                <span className="text-xs text-white font-medium">{formattedDate}</span>
+                <span className="text-xs text-slate-400 dark:text-[#A0A0A0]">Joined date</span>
+                <span className="text-xs text-slate-800 dark:text-white font-medium">{formattedDate}</span>
               </div>
             </div>
           </div>
@@ -262,7 +262,7 @@ const Setting = () => {
                 setPreviewUrl(currentUser?.profilePicture || "");
               }}
               disabled={isSaving}
-              className="w-full py-3 rounded-xl border border-[#222222] hover:bg-[#111111] text-[#FFFFFF] text-sm font-bold transition-colors disabled:opacity-50"
+              className="w-full py-3 rounded-xl border border-slate-200 dark:border-[#222222] hover:bg-slate-100 dark:hover:bg-[#111111] text-slate-800 dark:text-[#FFFFFF] text-sm font-bold transition-colors disabled:opacity-50"
             >
               Cancel
             </button>
@@ -273,9 +273,9 @@ const Setting = () => {
   }
 
   return (
-    <div className="h-full overflow-y-auto bg-[#000000] text-[#FFFFFF] font-sans">
+    <div className="h-full overflow-y-auto bg-white dark:bg-[#000000] text-slate-800 dark:text-[#FFFFFF] font-sans">
       {/* Header */}
-      <div className="p-4 border-b border-[#222222] bg-[#111111] flex items-center justify-between sticky top-0 z-10">
+      <div className="p-4 border-b border-slate-200 dark:border-[#222222] bg-slate-50 dark:bg-[#111111] flex items-center justify-between sticky top-0 z-10">
         <h2 className="text-xl font-bold">Settings</h2>
         <StatusSelector />
       </div>
@@ -283,13 +283,13 @@ const Setting = () => {
       {/* Profile card */}
       <div
         onClick={() => setIsEditingProfile(true)}
-        className="flex items-center gap-4 p-4 border-b border-[#222222] bg-[#111111] hover:bg-[#1c1c1c] transition-colors cursor-pointer"
+        className="flex items-center gap-4 p-4 border-b border-slate-200 dark:border-[#222222] bg-slate-50 dark:bg-[#111111] hover:bg-slate-100 dark:hover:bg-[#1c1c1c] transition-colors cursor-pointer"
       >
         {currentUser?.profilePicture ? (
           <img
             src={currentUser.profilePicture}
             alt=""
-            className="w-14 h-14 rounded-full object-cover border border-[#222222]"
+            className="w-14 h-14 rounded-full object-cover border border-slate-200 dark:border-[#222222]"
           />
         ) : (
           <div className="w-14 h-14 rounded-full bg-[#FF6B00] text-[#FFFFFF] flex items-center justify-center font-bold text-lg flex-shrink-0">
@@ -297,10 +297,10 @@ const Setting = () => {
           </div>
         )}
         <div className="flex-1 min-w-0 text-left">
-          <p className="font-semibold text-[#FFFFFF] truncate">
+          <p className="font-semibold text-slate-800 dark:text-[#FFFFFF] truncate">
             {currentUser?.username || currentUser?.name || "Your name"}
           </p>
-          <p className="text-xs text-[#A0A0A0] truncate mt-1">
+          <p className="text-xs text-slate-400 dark:text-[#A0A0A0] truncate mt-1">
             {currentUser?.about || "Hey there! I am using Flash Chat"}
           </p>
         </div>
@@ -352,16 +352,16 @@ const Setting = () => {
       <SettingRow label="App version" value="1.0.0" arrow={false} />
 
       {/* Danger zone */}
-      <div className="mt-6 border-t border-[#222222] bg-[#111111]">
+      <div className="mt-6 border-t border-slate-200 dark:border-[#222222] bg-slate-50 dark:bg-[#111111]">
         <button
           onClick={handleLogout}
-          className="w-full text-left px-4 py-3.5 border-b border-[#222222] text-[#FF9E00] hover:bg-[#1c1c1c] font-semibold text-sm transition-colors"
+          className="w-full text-left px-4 py-3.5 border-b border-slate-200 dark:border-[#222222] text-[#FF9E00] hover:bg-slate-100 dark:hover:bg-[#1c1c1c] font-semibold text-sm transition-colors"
         >
           Logout
         </button>
         <button
           onClick={handleDeleteAccount}
-          className="w-full text-left px-4 py-3.5 text-[#FF3D71] hover:bg-[#1c1c1c] font-semibold text-sm transition-colors"
+          className="w-full text-left px-4 py-3.5 text-[#FF3D71] hover:bg-slate-100 dark:hover:bg-[#1c1c1c] font-semibold text-sm transition-colors"
         >
           Delete account
         </button>
@@ -371,30 +371,30 @@ const Setting = () => {
 };
 
 const SectionLabel = ({ text }) => (
-  <p className="px-4 pt-5 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-[#A0A0A0] text-left">
+  <p className="px-4 pt-5 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-[#A0A0A0] text-left">
     {text}
   </p>
 );
 
 const SettingRow = ({ label, value, arrow = true }) => (
-  <div className="flex items-center justify-between px-4 py-3.5 border-b border-[#222222] bg-[#111111]">
-    <span className="text-sm text-[#FFFFFF]">{label}</span>
+  <div className="flex items-center justify-between px-4 py-3.5 border-b border-slate-200 dark:border-[#222222] bg-slate-50 dark:bg-[#111111]">
+    <span className="text-sm text-slate-800 dark:text-[#FFFFFF]">{label}</span>
     <div className="flex items-center gap-2">
-      <span className="text-xs text-[#A0A0A0]">{value}</span>
+      <span className="text-xs text-slate-400 dark:text-[#A0A0A0]">{value}</span>
       {arrow && <span className="text-[#A0A0A0] text-sm">›</span>}
     </div>
   </div>
 );
 
 const ToggleRow = ({ label, checked, onChange }) => (
-  <div className="flex items-center justify-between px-4 py-3.5 border-b border-[#222222] bg-[#111111]">
-    <span className="text-sm text-[#FFFFFF]">{label}</span>
+  <div className="flex items-center justify-between px-4 py-3.5 border-b border-slate-200 dark:border-[#222222] bg-slate-50 dark:bg-[#111111]">
+    <span className="text-sm text-slate-800 dark:text-[#FFFFFF]">{label}</span>
     <button
       onClick={onChange}
       role="switch"
       aria-checked={checked}
       className={`w-10 h-6 rounded-full relative transition-colors ${
-        checked ? "bg-[#00E676]" : "bg-[#222222]"
+        checked ? "bg-[#00E676]" : "bg-slate-200 dark:bg-[#222222]"
       }`}
     >
       <span

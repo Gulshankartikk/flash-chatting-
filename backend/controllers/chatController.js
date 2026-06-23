@@ -1,5 +1,5 @@
 const { uploadFileCloudinary } = require("../config/cloudinaryConfig");
-const Conversation = require("../models/Conversation");
+const Conversation = require("../models/conversation");
 const Message = require("../models/message");
 const response = require("../utils/responseHandler");
 
