@@ -5,17 +5,28 @@ const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
 const serviceSid = process.env.TWILIO_SERVICE_SID;
 
+// --- Sanity check: make sure env vars actually loaded ---
+if (!accountSid || !authToken || !serviceSid) {
+  console.log("\n❌ [TWILIO SERVICE] One or more required env vars are missing:");
+  console.log(`   TWILIO_ACCOUNT_SID: ${accountSid ? "set" : "MISSING"}`);
+  console.log(`   TWILIO_AUTH_TOKEN:  ${authToken ? "set" : "MISSING"}`);
+  console.log(`   TWILIO_SERVICE_SID: ${serviceSid ? "set" : "MISSING"}`);
+  console.log("👉 Check your .env file and that dotenv.config() runs before this module loads.\n");
+} else {
+  console.log("✅ [TWILIO SERVICE] Credentials loaded from environment.");
+}
+
 const client = twilio(accountSid, authToken);
 
 // SEND OTP TO PHONE NUMBER
 const sendOtpToPhone = async (phoneNumber) => {
+  if (!phoneNumber) {
+    throw new Error("Phone number is required");
+  }
+
+  console.log("[TWILIO SERVICE] Sending OTP to:", phoneNumber);
+
   try {
-    console.log("Sending OTP to:", phoneNumber);
-
-    if (!phoneNumber) {
-      throw new Error("Phone number is required");
-    }
-
     const response = await client.verify.v2
       .services(serviceSid)
       .verifications.create({
@@ -23,19 +34,25 @@ const sendOtpToPhone = async (phoneNumber) => {
         channel: "sms",
       });
 
-    console.log("OTP sent response:", response.status);
+    console.log("[TWILIO SERVICE] OTP sent. Status:", response.status);
     return response;
   } catch (error) {
-    console.error("Send OTP Error:", error.message, "Code:", error.code);
+    console.error("[TWILIO SERVICE] Send OTP failed.");
+    console.error("Message:", error.message, "| Code:", error.code);
+    console.error("Full error:", error);
     throw new Error(mapTwilioSendError(error));
   }
 };
 
 // VERIFY OTP
 const verifyOtp = async (phoneNumber, otp) => {
-  try {
-    console.log("Verifying OTP for", phoneNumber);
+  if (!phoneNumber || !otp) {
+    throw new Error("Phone number and OTP are required");
+  }
 
+  console.log("[TWILIO SERVICE] Verifying OTP for:", phoneNumber);
+
+  try {
     const response = await client.verify.v2
       .services(serviceSid)
       .verificationChecks.create({
@@ -43,10 +60,12 @@ const verifyOtp = async (phoneNumber, otp) => {
         code: otp,
       });
 
-    console.log("OTP verify response:", response.status);
+    console.log("[TWILIO SERVICE] OTP verify status:", response.status);
     return response;
   } catch (error) {
-    console.error("OTP Verify Error:", error.message, "Code:", error.code);
+    console.error("[TWILIO SERVICE] OTP verification failed.");
+    console.error("Message:", error.message, "| Code:", error.code);
+    console.error("Full error:", error);
     throw new Error(mapTwilioVerifyError(error));
   }
 };

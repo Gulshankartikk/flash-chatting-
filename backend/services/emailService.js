@@ -3,6 +3,22 @@ const dotenv = require("dotenv");
 
 dotenv.config();
 
+// --- Sanity check: make sure env vars actually loaded ---
+if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+  console.log("\n❌ [GMAIL SERVICE] EMAIL_USER or EMAIL_PASS is missing from environment.");
+  console.log("👉 Check that your .env file is in the project root and dotenv.config() runs before this file loads.\n");
+} else {
+  console.log(
+    `[GMAIL SERVICE] Loaded EMAIL_USER=${process.env.EMAIL_USER}, EMAIL_PASS length=${process.env.EMAIL_PASS.length}`
+  );
+  if (process.env.EMAIL_PASS.length !== 16) {
+    console.log(
+      "⚠️  [GMAIL SERVICE] EMAIL_PASS is not 16 characters — Gmail App Passwords are always 16 characters with no spaces."
+    );
+    console.log("👉 Generate one at https://myaccount.google.com/apppasswords (requires 2-Step Verification ON).\n");
+  }
+}
+
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
@@ -11,13 +27,20 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+let smtpReady = false;
+
 transporter.verify((error, success) => {
   if (error) {
-    console.log("\n⚠️  [GMAIL SERVICE] SMTP connection failed. Active email delivery is disabled.");
-    console.log("👉 Note: Development OTP fallback is active. All OTP codes will be printed to this console.");
-    console.log("👉 To enable real email sending, update EMAIL_PASS in your .env with a Google App Password.\n");
+    smtpReady = false;
+    console.log("\n⚠️  [GMAIL SERVICE] SMTP connection failed. Real email delivery is DISABLED.");
+    console.log("👉 Full error from Nodemailer:");
+    console.error(error);
+    console.log(
+      "\n👉 Most common causes: not using an App Password, 2-Step Verification not enabled, or wrong EMAIL_USER/EMAIL_PASS.\n"
+    );
   } else {
-    console.log("Gmail configured properly and ready to send email");
+    smtpReady = true;
+    console.log("✅ [GMAIL SERVICE] Gmail configured properly and ready to send email.");
   }
 });
 
@@ -41,27 +64,35 @@ const sendOtpToEmail = async (email, otp) => {
   `;
 
   try {
-    await transporter.sendMail({
+    const info = await transporter.sendMail({
       from: `Flash Chat <${process.env.EMAIL_USER}>`,
       to: email,
       subject: "Your Flash Chat verification code",
       html,
     });
-  } catch (error) {
-    console.error("Failed to send OTP email via SMTP:", error.message);
-    
-    // Log the OTP to the terminal console as a fallback for development/testing
-    console.log("\n==================================================");
-    console.log("🔑 [DEVELOPMENT OTP FALLBACK]");
-    console.log(`To: ${email}`);
-    console.log(`OTP Code: ${otp}`);
-    console.log("Use this code to verify in your frontend app.");
-    console.log("==================================================\n");
 
-    // In production we must throw the error, in development we let it succeed
+    console.log(`✅ [GMAIL SERVICE] OTP email sent to ${email} (messageId: ${info.messageId})`);
+    return { delivered: true, mode: "email" };
+  } catch (error) {
+    console.error("\n❌ [GMAIL SERVICE] Failed to send OTP email via SMTP.");
+    console.error("Reason:", error.message);
+    console.error("Full error:", error);
+
     if (process.env.NODE_ENV === "production") {
+      // Never silently fall back in production — the user must know the OTP wasn't delivered
       throw new Error("Failed to send OTP email. Please try again");
     }
+
+    // Development-only fallback: clearly flagged so it's never mistaken for a real send
+    console.log("\n==================================================");
+    console.log("🔑 [DEV FALLBACK — EMAIL NOT ACTUALLY SENT]");
+    console.log(`To: ${email}`);
+    console.log(`OTP Code: ${otp}`);
+    console.log("This code was only printed because SMTP failed (see error above).");
+    console.log("Fix the SMTP error to get real email delivery.");
+    console.log("==================================================\n");
+
+    return { delivered: false, mode: "console-fallback" };
   }
 };
 
