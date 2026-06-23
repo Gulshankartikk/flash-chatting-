@@ -28,7 +28,7 @@ const Layout = ({
   }, []);
 
   return (
-    <div className="min-h-screen flex relative bg-slate-50 dark:bg-[#0A0A0F] text-slate-800 dark:text-[#F0F0FF] font-sans">
+    <div className="min-h-screen flex relative bg-slate-50 dark:bg-[#000000] text-slate-800 dark:text-[#FFFFFF] font-sans">
       <style>{`
         .lo-theme-option { transition: background 0.12s ease, border-color 0.12s ease; }
         .lo-theme-option:hover { filter: brightness(1.15); }
@@ -45,7 +45,7 @@ const Layout = ({
               animate={{ x: 0 }}
               exit={{ x: "-100%" }}
               transition={{ type: "tween" }}
-              className="w-full md:w-[400px] h-full flex flex-col flex-shrink-0 border-r border-slate-200 dark:border-[#2A2A3D] bg-white dark:bg-[#0A0A0F]"
+              className="w-full md:w-[400px] h-full flex flex-col flex-shrink-0 border-r border-slate-200 dark:border-[#222222] bg-white dark:bg-[#000000]"
               style={{
                 paddingBottom: isMobile ? "64px" : "0px",
               }}
@@ -78,39 +78,39 @@ const Layout = ({
       {/* Theme Dialog */}
       {isThemeDialogOpen && (
         <div className="fixed inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm z-50 p-4 animate-fade-in">
-          <div className="bg-white dark:bg-[#1A1A26] border border-slate-200 dark:border-[#2A2A3D] text-slate-800 dark:text-[#F0F0FF] rounded-2xl p-6 max-w-sm w-full shadow-2xl">
+          <div className="bg-white dark:bg-[#1c1c1c] border border-slate-200 dark:border-[#222222] text-slate-800 dark:text-[#FFFFFF] rounded-2xl p-6 max-w-sm w-full shadow-2xl">
             <h2 className="text-lg font-bold mb-1">Appearance</h2>
-            <p className="text-xs text-slate-400 dark:text-[#9090B0] mb-4">Choose how Flash Chat looks on this device.</p>
+            <p className="text-xs text-slate-400 dark:text-[#A0A0A0] mb-4">Choose how Flash Chat looks on this device.</p>
 
             <div className="flex flex-col gap-2">
               <button
                 onClick={() => setTheme("light")}
                 className={`flex items-center justify-between p-3 rounded-xl border text-sm font-semibold cursor-pointer lo-theme-option ${
                   theme === "light"
-                    ? "border-[#6C63FF] bg-[#6C63FF]/10 text-[#6C63FF]"
-                    : "border-slate-200 dark:border-[#2A2A3D] bg-transparent text-slate-400 dark:text-[#9090B0]"
+                    ? "border-[#FF6B00] bg-[#FF6B00]/10 text-[#FF6B00]"
+                    : "border-slate-200 dark:border-[#222222] bg-transparent text-slate-400 dark:text-[#A0A0A0]"
                 }`}
               >
                 Light
-                {theme === "light" && <span className="w-2 h-2 rounded-full bg-[#6C63FF]" />}
+                {theme === "light" && <span className="w-2 h-2 rounded-full bg-[#FF6B00]" />}
               </button>
 
               <button
                 onClick={() => setTheme("dark")}
                 className={`flex items-center justify-between p-3 rounded-xl border text-sm font-semibold cursor-pointer lo-theme-option ${
                   theme === "dark"
-                    ? "border-[#6C63FF] bg-[#6C63FF]/10 text-[#6C63FF]"
-                    : "border-slate-200 dark:border-[#2A2A3D] bg-transparent text-slate-400 dark:text-[#9090B0]"
+                    ? "border-[#FF6B00] bg-[#FF6B00]/10 text-[#FF6B00]"
+                    : "border-slate-200 dark:border-[#222222] bg-transparent text-slate-400 dark:text-[#A0A0A0]"
                 }`}
               >
                 Dark
-                {theme === "dark" && <span className="w-2 h-2 rounded-full bg-[#6C63FF]" />}
+                {theme === "dark" && <span className="w-2 h-2 rounded-full bg-[#FF6B00]" />}
               </button>
             </div>
 
             <button
               onClick={toggleDialog}
-              className="mt-5 w-full py-2.5 rounded-xl bg-[#6C63FF] hover:bg-[#5b52e6] text-white text-sm font-bold transition-colors"
+              className="mt-5 w-full py-2.5 rounded-xl bg-[#FF6B00] hover:bg-[#E05E00] text-white text-sm font-bold transition-colors"
             >
               Done
             </button>

@@ -1,14 +1,14 @@
 import React from "react";
 
 const StatusDot = ({ isOnline, status = "online", size = 8 }) => {
-  let color = "#4A4A6A"; // Offline
+  let color = "#555555"; // Offline
   let shadow = "none";
 
   const currentStatus = isOnline ? status : "offline";
 
   if (currentStatus === "online") {
-    color = "#00D4FF"; // cyan glow dot
-    shadow = "0 0 8px #00D4FF";
+    color = "#FFD166"; // cyan glow dot
+    shadow = "0 0 8px #FFD166";
   } else if (currentStatus === "away") {
     color = "#FFB300"; // amber
     shadow = "0 0 6px #FFB300";

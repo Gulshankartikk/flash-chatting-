@@ -83,6 +83,16 @@ const initilizeSocket = (server) => {
         if (receiverSocketId) {
           io.to(receiverSocketId).emit("receive_message", message);
 
+          // Emit notification to receiver
+          const senderUser = await User.findById(userId).select("username profilePicture");
+          io.to(receiverSocketId).emit("new_notification", {
+            type: "message",
+            from: userId,
+            title: senderUser?.username || "New Message",
+            preview: message.content || message.message || "Sent an attachment",
+            avatar: senderUser?.profilePicture || "",
+          });
+
           // Recipient is online right now → mark delivered and tell the
           // sender so their UI can flip ✓ → ✓✓ (gray).
           if (message._id) {
@@ -240,6 +250,13 @@ const initilizeSocket = (server) => {
       const targetSocket = onlineUsers.get(to);
       if (targetSocket) {
         io.to(targetSocket).emit("incoming_call", { from, offer, roomId, callType, callerName, callerAvatar });
+        io.to(targetSocket).emit("new_notification", {
+          type: "call",
+          from: from,
+          title: `Incoming ${callType} Call`,
+          preview: `${callerName} is calling you`,
+          avatar: callerAvatar || "",
+        });
       }
     });
 

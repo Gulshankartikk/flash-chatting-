@@ -46,7 +46,7 @@ exports.sendMessage = async (req, res) => {
       } else if (file.mimetype.startsWith("audio")) {
         contentType = "audio";
       } else {
-        return response(res, 400, "Unsupported file type");
+        contentType = "document";
       }
     } else if (content?.trim()) {
       contentType = "text";
@@ -383,6 +383,167 @@ exports.reactToMessage = async (req, res) => {
     }
 
     return response(res, 200, "Reaction updated", messageDoc.reactions);
+  } catch (error) {
+    console.error(error);
+    return response(res, 500, "Internal server error");
+  }
+};
+
+// ================= EDIT MESSAGE =================
+exports.editMessage = async (req, res) => {
+  const { messageId } = req.params;
+  const { content } = req.body;
+  const userId = req.user.userId;
+
+  try {
+    const message = await Message.findById(messageId);
+    if (!message) return response(res, 404, "Message not found");
+
+    if (String(message.sender) !== String(userId)) {
+      return response(res, 403, "You can only edit your own messages");
+    }
+
+    message.content = content;
+    message.isEdited = true;
+    await message.save();
+
+    const populated = await Message.findById(message._id)
+      .populate("sender", "username profilePicture")
+      .populate("receiver", "username profilePicture");
+
+    if (req.io && req.socketUserMap) {
+      const otherUserId =
+        String(populated.sender._id) === String(userId)
+          ? populated.receiver?._id
+          : populated.sender._id;
+      if (otherUserId) {
+        const otherSocketId = req.socketUserMap.get(String(otherUserId));
+        if (otherSocketId) {
+          req.io.to(otherSocketId).emit("message_edited", {
+            messageId: populated._id,
+            content: populated.content,
+            isEdited: true,
+          });
+        }
+      }
+    }
+
+    return response(res, 200, "Message edited successfully", populated);
+  } catch (error) {
+    console.error(error);
+    return response(res, 500, "Internal server error");
+  }
+};
+
+// ================= BULK DELETE MESSAGES =================
+exports.bulkDeleteMessages = async (req, res) => {
+  const { messageIds, deleteFor } = req.body;
+  const userId = req.user.userId;
+
+  if (!Array.isArray(messageIds) || messageIds.length === 0) {
+    return response(res, 400, "messageIds is required and must be an array");
+  }
+
+  try {
+    if (deleteFor === "everyone") {
+      // "Delete for everyone" only allows sender to delete
+      const messages = await Message.find({ _id: { $in: messageIds }, sender: userId });
+      const idsToWipe = messages.map((m) => m._id);
+
+      await Message.updateMany(
+        { _id: { $in: idsToWipe } },
+        {
+          $set: {
+            content: "",
+            imageOrVideoUrl: null,
+            isDeletedForEveryone: true,
+          },
+        }
+      );
+
+      if (req.io && req.socketUserMap) {
+        messages.forEach((msg) => {
+          const otherUserId =
+            String(msg.sender) === String(userId)
+              ? msg.receiver
+              : msg.sender;
+          if (otherUserId) {
+            const otherSocketId = req.socketUserMap.get(String(otherUserId));
+            if (otherSocketId) {
+              req.io.to(otherSocketId).emit("message_deleted", {
+                messageId: msg._id,
+                deleteForEveryone: true,
+              });
+            }
+          }
+        });
+      }
+    } else {
+      // "Delete for me"
+      await Message.updateMany(
+        { _id: { $in: messageIds } },
+        { $addToSet: { deletedFor: userId } }
+      );
+    }
+
+    return response(res, 200, "Messages deleted successfully");
+  } catch (error) {
+    console.error(error);
+    return response(res, 500, "Internal server error");
+  }
+};
+
+// ================= PIN MESSAGE =================
+exports.pinMessage = async (req, res) => {
+  const { messageId } = req.params;
+  const userId = req.user.userId;
+
+  try {
+    const message = await Message.findById(messageId);
+    if (!message) return response(res, 404, "Message not found");
+
+    const isParticipant =
+      String(message.sender) === String(userId) ||
+      String(message.receiver) === String(userId);
+
+    if (!isParticipant) {
+      return response(res, 403, "Unauthorized");
+    }
+
+    // Toggle pin status
+    message.isPinned = !message.isPinned;
+    await message.save();
+
+    // If pinning a new message, unpin all other messages in this conversation (WhatsApp only allows 1 pinned message per chat)
+    if (message.isPinned) {
+      await Message.updateMany(
+        { conversation: message.conversation, _id: { $ne: messageId } },
+        { $set: { isPinned: false } }
+      );
+    }
+
+    const populated = await Message.findById(message._id)
+      .populate("sender", "username profilePicture")
+      .populate("receiver", "username profilePicture");
+
+    if (req.io && req.socketUserMap) {
+      const otherUserId =
+        String(populated.sender._id) === String(userId)
+          ? populated.receiver?._id
+          : populated.sender._id;
+      if (otherUserId) {
+        const otherSocketId = req.socketUserMap.get(String(otherUserId));
+        if (otherSocketId) {
+          req.io.to(otherSocketId).emit("message_pinned", {
+            messageId: populated._id,
+            isPinned: populated.isPinned,
+            conversationId: populated.conversation,
+          });
+        }
+      }
+    }
+
+    return response(res, 200, "Message pin toggled successfully", populated);
   } catch (error) {
     console.error(error);
     return response(res, 500, "Internal server error");

@@ -92,7 +92,7 @@ const ChatInput = ({
   };
 
   return (
-    <div className="flex flex-col bg-[#111118] border-t border-[#2A2A3D] z-10 flex-shrink-0">
+    <div className="flex flex-col bg-[#111111] border-t border-[#222222] z-10 flex-shrink-0">
       {/* Reply Preview */}
       {replyTo && (
         <ReplyPreview
@@ -104,38 +104,38 @@ const ChatInput = ({
 
       {/* File Preview Bar */}
       {selectedFile && (
-        <div className="flex items-center justify-between p-3 bg-[#1A1A26] border-t border-[#2A2A3D]">
+        <div className="flex items-center justify-between p-3 bg-[#1c1c1c] border-t border-[#222222]">
           <div className="flex items-center gap-3">
             {fileType === "image" && (
-              <img src={filePreview} alt="preview" className="w-12 h-12 object-cover rounded-lg border border-[#2A2A3D]" />
+              <img src={filePreview} alt="preview" className="w-12 h-12 object-cover rounded-lg border border-[#222222]" />
             )}
             {fileType === "video" && (
-              <div className="w-12 h-12 flex items-center justify-center bg-black rounded-lg border border-[#2A2A3D]">
-                <Video size={18} className="text-[#00D4FF]" />
+              <div className="w-12 h-12 flex items-center justify-center bg-black rounded-lg border border-[#222222]">
+                <Video size={18} className="text-[#FFD166]" />
               </div>
             )}
             {fileType === "audio" && (
-              <div className="w-12 h-12 flex items-center justify-center bg-[#2A2A3D] rounded-lg">
+              <div className="w-12 h-12 flex items-center justify-center bg-[#222222] rounded-lg">
                 <span className="text-xl">🎵</span>
               </div>
             )}
             {fileType === "document" && (
-              <div className="w-12 h-12 flex items-center justify-center bg-[#2A2A3D] rounded-lg">
-                <File size={20} className="text-[#6C63FF]" />
+              <div className="w-12 h-12 flex items-center justify-center bg-[#222222] rounded-lg">
+                <File size={20} className="text-[#FF6B00]" />
               </div>
             )}
             <div className="text-left">
-              <p className="text-xs font-semibold text-[#F0F0FF] truncate max-w-[200px]">
+              <p className="text-xs font-semibold text-[#FFFFFF] truncate max-w-[200px]">
                 {selectedFile.name}
               </p>
-              <p className="text-[10px] text-[#9090B0]">
+              <p className="text-[10px] text-[#A0A0A0]">
                 {(selectedFile.size / 1024).toFixed(1)} KB
               </p>
             </div>
           </div>
           <button
             onClick={handleCancelFile}
-            className="p-1 hover:bg-[#2A2A3D] rounded-full text-[#9090B0] hover:text-[#FF3D71]"
+            className="p-1 hover:bg-[#222222] rounded-full text-[#A0A0A0] hover:text-[#FF3D71]"
           >
             <X size={16} />
           </button>
@@ -152,14 +152,14 @@ const ChatInput = ({
         />
         <button
           onClick={() => fileInputRef.current?.click()}
-          className="p-2 hover:bg-[#1A1A26] rounded-full text-[#9090B0] hover:text-[#6C63FF] transition-colors"
+          className="p-2 hover:bg-[#1c1c1c] rounded-full text-[#A0A0A0] hover:text-[#FF6B00] transition-colors"
           title="Attach File"
         >
           <Paperclip size={20} />
         </button>
 
         <button
-          className="p-2 hover:bg-[#1A1A26] rounded-full text-[#9090B0] hover:text-[#FF6584] transition-colors"
+          className="p-2 hover:bg-[#1c1c1c] rounded-full text-[#A0A0A0] hover:text-[#FF9E00] transition-colors"
           title="Emojis"
         >
           <Smile size={20} />
@@ -171,13 +171,13 @@ const ChatInput = ({
           onChange={handleTextChange}
           onKeyDown={handleKeyDown}
           placeholder={selectedFile ? "Add a caption..." : "Type a message..."}
-          className="flex-1 px-4 py-2.5 rounded-full bg-[#1A1A26] text-[#F0F0FF] placeholder-[#4A4A6A] border border-[#2A2A3D] focus:outline-none focus:border-[#6C63FF] text-sm transition-colors"
+          className="flex-1 px-4 py-2.5 rounded-full bg-[#1c1c1c] text-[#FFFFFF] placeholder-[#555555] border border-[#222222] focus:outline-none focus:border-[#FF6B00] text-sm transition-colors"
         />
 
         <button
           onClick={handleSendClick}
           disabled={!draft.trim() && !selectedFile}
-          className="p-2.5 bg-[#6C63FF] hover:bg-[#5b52e6] disabled:bg-[#1A1A26] text-white disabled:text-[#4A4A6A] rounded-full transition-colors flex-shrink-0"
+          className="p-2.5 bg-[#FF6B00] hover:bg-[#E05E00] disabled:bg-[#1c1c1c] text-white disabled:text-[#555555] rounded-full transition-colors flex-shrink-0"
         >
           <Send size={16} />
         </button>

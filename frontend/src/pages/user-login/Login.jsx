@@ -425,16 +425,16 @@ export default function Login() {
   const changeContact = () => goBack();
 
   // ---------------- Theme tokens ----------------
-  const bg = dark ? "#0B1F1C" : "#F2EFE7";
-  const cardBg = dark ? "#13302B" : "#FDFBF6";
-  const ink = dark ? "#F2F0E9" : "#16221F";
-  const sub = dark ? "#9FB3AC" : "#5C6B66";
-  const railBg = dark ? "#0E2622" : "#16332D";
-  const accent = "#1FAE5C";
-  const amber = "#F4A623";
+  const bg = dark ? "#000000" : "#F2EFE7";
+  const cardBg = dark ? "#111111" : "#FDFBF6";
+  const ink = dark ? "#FFFFFF" : "#16221F";
+  const sub = dark ? "#A0A0A0" : "#5C6B66";
+  const railBg = dark ? "#1c1c1c" : "#16332D";
+  const accent = "#FF6B00";
+  const amber = "#FF9E00";
   const danger = "#E5604A";
-  const border = dark ? "rgba(242,240,233,0.12)" : "rgba(22,34,31,0.12)";
-  const inputBg = dark ? "#0E2622" : "#FFFFFF";
+  const border = dark ? "rgba(255, 255, 255, 0.1)" : "rgba(22,34,31,0.12)";
+  const inputBg = dark ? "#1c1c1c" : "#FFFFFF";
 
   return (
     <div
@@ -550,7 +550,7 @@ export default function Login() {
               </div>
               <span
                 className="fc-display"
-                style={{ color: "#F2F0E9", fontWeight: 700, fontSize: 16, letterSpacing: -0.3 }}
+                style={{ color: "#FFFFFF", fontWeight: 700, fontSize: 16, letterSpacing: -0.3 }}
               >
                 flashchat
               </span>
@@ -583,10 +583,10 @@ export default function Login() {
                         background: stateDone
                           ? accent
                           : stateActive
-                          ? "rgba(31,174,92,0.18)"
+                          ? "rgba(255, 107, 0, 0.18)"
                           : "transparent",
                         border: stateActive ? `1.5px solid ${accent}` : `1.5px solid rgba(242,240,233,0.25)`,
-                        color: stateDone ? "#0B1F1C" : "#F2F0E9",
+                        color: stateDone ? "#000000" : "#FFFFFF",
                       }}
                     >
                       {stateDone ? (
@@ -601,13 +601,13 @@ export default function Login() {
                           fontSize: 10.5,
                           textTransform: "uppercase",
                           letterSpacing: 0.6,
-                          color: "#8FA39C",
+                          color: "#A0A0A0",
                           marginBottom: 2,
                         }}
                       >
                         Step {s.id}
                       </div>
-                      <div style={{ fontSize: 13.5, color: "#F2F0E9", fontWeight: 500 }}>
+                      <div style={{ fontSize: 13.5, color: "#FFFFFF", fontWeight: 500 }}>
                         {s.label}
                       </div>
                     </div>
@@ -617,7 +617,7 @@ export default function Login() {
             </div>
           </div>
 
-          <p style={{ fontSize: 11.5, color: "#6E837C", lineHeight: 1.5 }}>
+          <p style={{ fontSize: 11.5, color: "#555555", lineHeight: 1.5 }}>
             Your number stays private. Only people you message can see it.
           </p>
         </div>
@@ -846,7 +846,7 @@ function StepOne({
     border: "none",
     cursor: "pointer",
     background: active ? accent : "transparent",
-    color: active ? "#0B1F1C" : sub,
+    color: active ? "#000000" : sub,
     transition: "background 0.15s ease, color 0.15s ease",
   });
 
@@ -1020,7 +1020,7 @@ function StepOne({
         className="fc-btn-primary"
         style={{
           background: accent,
-          color: "#0B1F1C",
+          color: "#000000",
           fontWeight: 700,
           fontSize: 14.5,
           padding: "13px 0",
@@ -1150,7 +1150,7 @@ function StepTwo({
         className="fc-btn-primary"
         style={{
           background: accent,
-          color: "#0B1F1C",
+          color: "#000000",
           fontWeight: 700,
           fontSize: 14.5,
           padding: "13px 0",
@@ -1370,7 +1370,7 @@ function StepThree({
         className="fc-btn-primary"
         style={{
           background: accent,
-          color: "#0B1F1C",
+          color: "#000000",
           fontWeight: 700,
           fontSize: 14.5,
           padding: "13px 0",

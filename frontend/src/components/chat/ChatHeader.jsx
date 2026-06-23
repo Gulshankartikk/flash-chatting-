@@ -32,11 +32,11 @@ const ChatHeader = ({
   const isOnline = otherUser?.isOnline;
 
   return (
-    <div className="flex items-center gap-3 px-4 py-3 bg-[#111118] border-b border-[#2A2A3D] z-10 flex-shrink-0">
+    <div className="flex items-center gap-3 px-4 py-3 bg-[#111111] border-b border-[#222222] z-10 flex-shrink-0">
       {isMobile && (
         <button
           onClick={onBack}
-          className="p-1.5 hover:bg-[#1A1A26] rounded-full text-[#9090B0] hover:text-[#F0F0FF] transition-colors"
+          className="p-1.5 hover:bg-[#1c1c1c] rounded-full text-[#A0A0A0] hover:text-[#FFFFFF] transition-colors"
         >
           <ArrowLeft size={20} />
         </button>
@@ -48,10 +48,10 @@ const ChatHeader = ({
           <img
             src={avatar}
             alt={name}
-            className="w-10 h-10 rounded-full object-cover border border-[#2A2A3D]"
+            className="w-10 h-10 rounded-full object-cover border border-[#222222]"
           />
         ) : (
-          <div className="w-10 h-10 rounded-full bg-[#6C63FF] text-[#F0F0FF] flex items-center justify-center font-bold text-sm">
+          <div className="w-10 h-10 rounded-full bg-[#FF6B00] text-[#FFFFFF] flex items-center justify-center font-bold text-sm">
             {name.charAt(0).toUpperCase()}
           </div>
         )}
@@ -63,10 +63,10 @@ const ChatHeader = ({
 
       {/* Name and online status status message */}
       <div className="flex-1 text-left min-w-0">
-        <h3 className="text-sm font-semibold text-[#F0F0FF] truncate">{name}</h3>
-        <p className="text-[11px] text-[#9090B0] truncate font-medium">
+        <h3 className="text-sm font-semibold text-[#FFFFFF] truncate">{name}</h3>
+        <p className="text-[11px] text-[#A0A0A0] truncate font-medium">
           {isTyping ? (
-            <span className="text-[#00D4FF] font-semibold">typing...</span>
+            <span className="text-[#FFD166] font-semibold">typing...</span>
           ) : isOnline ? (
             "Online"
           ) : (
@@ -79,21 +79,21 @@ const ChatHeader = ({
       <div className="flex items-center gap-1.5">
         <button
           onClick={onVoiceCall}
-          className="p-2 hover:bg-[#1A1A26] rounded-full text-[#9090B0] hover:text-[#00D4FF] transition-colors"
+          className="p-2 hover:bg-[#1c1c1c] rounded-full text-[#A0A0A0] hover:text-[#FFD166] transition-colors"
           title="Voice Call"
         >
           <Phone size={16} />
         </button>
         <button
           onClick={onVideoCall}
-          className="p-2 hover:bg-[#1A1A26] rounded-full text-[#9090B0] hover:text-[#00D4FF] transition-colors"
+          className="p-2 hover:bg-[#1c1c1c] rounded-full text-[#A0A0A0] hover:text-[#FFD166] transition-colors"
           title="Video Call"
         >
           <Video size={16} />
         </button>
         <button
           onClick={onSearchToggle}
-          className="p-2 hover:bg-[#1A1A26] rounded-full text-[#9090B0] hover:text-[#6C63FF] transition-colors"
+          className="p-2 hover:bg-[#1c1c1c] rounded-full text-[#A0A0A0] hover:text-[#FF6B00] transition-colors"
           title="Search messages"
         >
           <Search size={16} />
@@ -102,20 +102,20 @@ const ChatHeader = ({
         <div className="relative" ref={menuRef}>
           <button
             onClick={() => setMenuOpen(!menuOpen)}
-            className="p-2 hover:bg-[#1A1A26] rounded-full text-[#9090B0] hover:text-[#F0F0FF] transition-colors"
+            className="p-2 hover:bg-[#1c1c1c] rounded-full text-[#A0A0A0] hover:text-[#FFFFFF] transition-colors"
             title="Options"
           >
             <MoreVertical size={16} />
           </button>
 
           {menuOpen && (
-            <div className="absolute right-0 top-full mt-1.5 bg-[#1A1A26] border border-[#2A2A3D] rounded-lg shadow-2xl py-1 w-36 z-20 text-left">
+            <div className="absolute right-0 top-full mt-1.5 bg-[#1c1c1c] border border-[#222222] rounded-lg shadow-2xl py-1 w-36 z-20 text-left">
               <button
                 onClick={() => {
                   if (onBlockToggle) onBlockToggle();
                   setMenuOpen(false);
                 }}
-                className="flex items-center gap-2 px-3 py-2 text-xs text-[#FF6584] hover:bg-[#2A2A3D] transition-colors w-full"
+                className="flex items-center gap-2 px-3 py-2 text-xs text-[#FF9E00] hover:bg-[#222222] transition-colors w-full"
               >
                 <ShieldAlert size={12} />
                 {isBlocked ? "Unblock" : "Block User"}

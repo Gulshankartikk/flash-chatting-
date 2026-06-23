@@ -48,7 +48,7 @@ const LocalVideo = ({ stream, isCamOff, username }) => {
     <div
       ref={containerRef}
       onMouseDown={handleMouseDown}
-      className="absolute w-36 h-48 rounded-xl overflow-hidden shadow-2xl border-2 border-[#00D4FF] bg-[#1A1A26] z-40 cursor-move select-none"
+      className="absolute w-36 h-48 rounded-xl overflow-hidden shadow-2xl border-2 border-[#FFD166] bg-[#1c1c1c] z-40 cursor-move select-none"
       style={{
         bottom: `${Math.max(10, position.y)}px`,
         right: `${Math.max(10, position.x)}px`,
@@ -63,8 +63,8 @@ const LocalVideo = ({ stream, isCamOff, username }) => {
           className="w-full h-full object-cover scale-x-[-1]"
         />
       ) : (
-        <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-xs text-[#9090B0] bg-black/60">
-          <div className="w-12 h-12 rounded-full bg-[#6C63FF] text-[#F0F0FF] flex items-center justify-center font-bold text-lg">
+        <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-xs text-[#A0A0A0] bg-black/60">
+          <div className="w-12 h-12 rounded-full bg-[#FF6B00] text-[#FFFFFF] flex items-center justify-center font-bold text-lg">
             {username?.charAt(0).toUpperCase() || "Y"}
           </div>
           <span>Camera Off</span>

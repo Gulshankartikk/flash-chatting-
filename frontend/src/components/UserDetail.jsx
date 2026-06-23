@@ -41,15 +41,15 @@ const UserDetail = () => {
   const [confirmAction, setConfirmAction] = useState(null); // "block" | "report" | null
 
   // ---- Premium Dark palette tokens ----
-  const ink = "#F0F0FF";
-  const sub = "#9090B0";
-  const accent = "#6C63FF";
+  const ink = "#FFFFFF";
+  const sub = "#A0A0A0";
+  const accent = "#FF6B00";
   const danger = "#FF3D71";
-  const border = "#2A2A3D";
-  const panelBg = "#0A0A0F";
-  const headerBg = "#111118";
-  const rowBg = "#1A1A26";
-  const dialogBg = "#1A1A26";
+  const border = "#222222";
+  const panelBg = "#000000";
+  const headerBg = "#111111";
+  const rowBg = "#1c1c1c";
+  const dialogBg = "#1c1c1c";
 
   if (!selectedContact) {
     return (
@@ -170,8 +170,8 @@ const UserDetail = () => {
                 width: 18,
                 height: 18,
                 borderRadius: "50%",
-                background: "#00D4FF",
-                boxShadow: "0 0 8px #00D4FF",
+                background: "#FFD166",
+                boxShadow: "0 0 8px #FFD166",
                 border: `3px solid ${panelBg}`,
               }}
             />

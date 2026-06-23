@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import useThemeStore from "../../store/useThemeStore";
 import useUserStore from "../../store/useUserStore";
 import StatusSelector from "../../components/status/StatusSelector";
+import { updateUserProfile } from "../../services/user.service";
 
 const Setting = () => {
   const { theme, toggleTheme } = useThemeStore();
@@ -13,6 +14,24 @@ const Setting = () => {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [readReceipts, setReadReceipts] = useState(true);
   const [showOnlineStatus, setShowOnlineStatus] = useState(true);
+
+  // Profile Edit States
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [editUsername, setEditUsername] = useState(currentUser?.username || "");
+  const [editAbout, setEditAbout] = useState(currentUser?.about || "");
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(currentUser?.profilePicture || "");
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  useEffect(() => {
+    if (currentUser) {
+      setEditUsername(currentUser.username || "");
+      setEditAbout(currentUser.about || "");
+      setPreviewUrl(currentUser.profilePicture || "");
+    }
+  }, [currentUser]);
 
   const handleLogout = () => {
     if (window.confirm("Are you sure you want to logout?")) {
@@ -30,36 +49,262 @@ const Setting = () => {
     }
   };
 
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setSelectedFile(file);
+      setPreviewUrl(URL.createObjectURL(file));
+      setSaveSuccess(false);
+      setSaveError("");
+    }
+  };
+
+  const handleSave = async () => {
+    if (!editUsername.trim()) {
+      setSaveError("Username is required");
+      return;
+    }
+    setIsSaving(true);
+    setSaveError("");
+    setSaveSuccess(false);
+
+    try {
+      let payload;
+      if (selectedFile) {
+        payload = new FormData();
+        payload.append("media", selectedFile);
+        payload.append("username", editUsername.trim());
+        payload.append("about", editAbout.trim());
+      } else {
+        payload = {
+          username: editUsername.trim(),
+          about: editAbout.trim(),
+        };
+      }
+
+      const res = await updateUserProfile(payload);
+      if (res && res.success && res.data) {
+        // Update Zustand store
+        useUserStore.getState().setUser(res.data);
+        setSaveSuccess(true);
+        // Automatically return to main settings after short delay
+        setTimeout(() => {
+          setIsEditingProfile(false);
+          setSaveSuccess(false);
+          setSelectedFile(null);
+        }, 1200);
+      } else {
+        setSaveError(res?.message || "Failed to update profile");
+      }
+    } catch (err) {
+      setSaveError(err?.message || "Something went wrong while saving changes");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const formattedDate = currentUser?.createdAt
+    ? new Date(currentUser.createdAt).toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+    : "N/A";
+
+  if (isEditingProfile) {
+    return (
+      <div className="h-full overflow-y-auto bg-[#000000] text-[#FFFFFF] font-sans flex flex-col">
+        {/* Header */}
+        <div className="p-4 border-b border-[#222222] bg-[#111111] flex items-center gap-3 sticky top-0 z-10">
+          <button
+            onClick={() => {
+              setIsEditingProfile(false);
+              setSaveError("");
+              setSaveSuccess(false);
+              setSelectedFile(null);
+              setPreviewUrl(currentUser?.profilePicture || "");
+            }}
+            className="text-[#FF6B00] hover:text-[#E05E00] text-xl font-bold flex items-center justify-center w-8 h-8 rounded-full hover:bg-[#222222] transition-colors"
+          >
+            ←
+          </button>
+          <h2 className="text-xl font-bold">Edit Profile</h2>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 flex-1 flex flex-col gap-6">
+          {/* Profile Picture Section */}
+          <div className="flex flex-col items-center gap-3">
+            <div className="relative w-28 h-28 group mx-auto">
+              {previewUrl ? (
+                <img
+                  src={previewUrl}
+                  alt="Profile"
+                  className="w-28 h-28 rounded-full object-cover border-2 border-[#FF6B00] shadow-md shadow-[#FF6B00]/10"
+                />
+              ) : (
+                <div className="w-28 h-28 rounded-full bg-[#FF6B00] text-[#FFFFFF] flex items-center justify-center font-bold text-3xl shadow-md shadow-[#FF6B00]/10">
+                  {currentUser?.username?.charAt(0)?.toUpperCase() || "U"}
+                </div>
+              )}
+
+              {/* Hover Overlay */}
+              <label className="absolute inset-0 bg-black/50 rounded-full flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer border border-[#FF6B00]/50">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-6 w-6 text-white mb-1"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"
+                  />
+                </svg>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-white">Change Photo</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileChange}
+                  className="hidden"
+                />
+              </label>
+            </div>
+            <p className="text-xs text-[#A0A0A0]">Upload JPG, PNG or GIF</p>
+          </div>
+
+          {/* Feedback Messages */}
+          {saveError && (
+            <div className="bg-[#FF3D71]/10 border border-[#FF3D71]/20 text-[#FF3D71] text-xs font-semibold px-4 py-3 rounded-xl">
+              {saveError}
+            </div>
+          )}
+          {saveSuccess && (
+            <div className="bg-[#00E676]/10 border border-[#00E676]/20 text-[#00E676] text-xs font-semibold px-4 py-3 rounded-xl">
+              Profile updated successfully!
+            </div>
+          )}
+
+          {/* Form Fields */}
+          <div className="flex flex-col gap-4 text-left">
+            {/* Username */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] font-bold uppercase tracking-wider text-[#A0A0A0]">
+                Username
+              </label>
+              <input
+                type="text"
+                value={editUsername}
+                onChange={(e) => setEditUsername(e.target.value)}
+                placeholder="Enter username"
+                className="bg-[#111111] border border-[#222222] rounded-xl p-3 text-sm focus:border-[#FF6B00] outline-none text-[#FFFFFF] w-full transition-colors"
+              />
+            </div>
+
+            {/* About / Bio */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] font-bold uppercase tracking-wider text-[#A0A0A0]">
+                About / Bio
+              </label>
+              <textarea
+                value={editAbout}
+                onChange={(e) => setEditAbout(e.target.value)}
+                placeholder="Tell us about yourself"
+                rows={3}
+                className="bg-[#111111] border border-[#222222] rounded-xl p-3 text-sm focus:border-[#FF6B00] outline-none text-[#FFFFFF] w-full resize-none transition-colors"
+              />
+            </div>
+
+            {/* Read-only account info */}
+            <div className="mt-2 border-t border-[#222222] pt-4 flex flex-col gap-3">
+              <div className="flex justify-between items-center py-1">
+                <span className="text-xs text-[#A0A0A0]">Email</span>
+                <span className="text-xs text-white font-medium">{currentUser?.email || "Not set"}</span>
+              </div>
+              <div className="flex justify-between items-center py-1">
+                <span className="text-xs text-[#A0A0A0]">Phone number</span>
+                <span className="text-xs text-white font-medium">
+                  {currentUser?.phoneNumber
+                    ? `${currentUser?.phoneSuffix || ""} ${currentUser?.phoneNumber}`
+                    : "Not set"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-1">
+                <span className="text-xs text-[#A0A0A0]">Joined date</span>
+                <span className="text-xs text-white font-medium">{formattedDate}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="mt-auto flex flex-col gap-2 pt-6">
+            <button
+              onClick={handleSave}
+              disabled={isSaving}
+              className="w-full py-3 rounded-xl bg-[#FF6B00] hover:bg-[#E05E00] text-white text-sm font-bold transition-colors shadow-lg shadow-[#FF6B00]/10 flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {isSaving ? "Saving..." : "Save Changes"}
+            </button>
+            <button
+              onClick={() => {
+                setIsEditingProfile(false);
+                setSaveError("");
+                setSaveSuccess(false);
+                setSelectedFile(null);
+                setPreviewUrl(currentUser?.profilePicture || "");
+              }}
+              disabled={isSaving}
+              className="w-full py-3 rounded-xl border border-[#222222] hover:bg-[#111111] text-[#FFFFFF] text-sm font-bold transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="h-full overflow-y-auto bg-[#0A0A0F] text-[#F0F0FF] font-sans">
+    <div className="h-full overflow-y-auto bg-[#000000] text-[#FFFFFF] font-sans">
       {/* Header */}
-      <div className="p-4 border-b border-[#2A2A3D] bg-[#111118] flex items-center justify-between sticky top-0 z-10">
+      <div className="p-4 border-b border-[#222222] bg-[#111111] flex items-center justify-between sticky top-0 z-10">
         <h2 className="text-xl font-bold">Settings</h2>
         <StatusSelector />
       </div>
 
       {/* Profile card */}
-      <div className="flex items-center gap-4 p-4 border-b border-[#2A2A3D] bg-[#111118] hover:bg-[#1A1A26] transition-colors cursor-pointer">
+      <div
+        onClick={() => setIsEditingProfile(true)}
+        className="flex items-center gap-4 p-4 border-b border-[#222222] bg-[#111111] hover:bg-[#1c1c1c] transition-colors cursor-pointer"
+      >
         {currentUser?.profilePicture ? (
           <img
             src={currentUser.profilePicture}
             alt=""
-            className="w-14 h-14 rounded-full object-cover border border-[#2A2A3D]"
+            className="w-14 h-14 rounded-full object-cover border border-[#222222]"
           />
         ) : (
-          <div className="w-14 h-14 rounded-full bg-[#6C63FF] text-[#F0F0FF] flex items-center justify-center font-bold text-lg flex-shrink-0">
+          <div className="w-14 h-14 rounded-full bg-[#FF6B00] text-[#FFFFFF] flex items-center justify-center font-bold text-lg flex-shrink-0">
             {currentUser?.username?.charAt(0)?.toUpperCase() || "U"}
           </div>
         )}
         <div className="flex-1 min-w-0 text-left">
-          <p className="font-semibold text-[#F0F0FF] truncate">
+          <p className="font-semibold text-[#FFFFFF] truncate">
             {currentUser?.username || currentUser?.name || "Your name"}
           </p>
-          <p className="text-xs text-[#9090B0] truncate mt-1">
+          <p className="text-xs text-[#A0A0A0] truncate mt-1">
             {currentUser?.about || "Hey there! I am using Flash Chat"}
           </p>
         </div>
-        <span className="text-[#9090B0] text-lg font-bold">›</span>
+        <span className="text-[#A0A0A0] text-lg font-bold">›</span>
       </div>
 
       {/* Account section */}
@@ -107,16 +352,16 @@ const Setting = () => {
       <SettingRow label="App version" value="1.0.0" arrow={false} />
 
       {/* Danger zone */}
-      <div className="mt-6 border-t border-[#2A2A3D] bg-[#111118]">
+      <div className="mt-6 border-t border-[#222222] bg-[#111111]">
         <button
           onClick={handleLogout}
-          className="w-full text-left px-4 py-3.5 border-b border-[#2A2A3D] text-[#FF6584] hover:bg-[#1A1A26] font-semibold text-sm transition-colors"
+          className="w-full text-left px-4 py-3.5 border-b border-[#222222] text-[#FF9E00] hover:bg-[#1c1c1c] font-semibold text-sm transition-colors"
         >
           Logout
         </button>
         <button
           onClick={handleDeleteAccount}
-          className="w-full text-left px-4 py-3.5 text-[#FF3D71] hover:bg-[#1A1A26] font-semibold text-sm transition-colors"
+          className="w-full text-left px-4 py-3.5 text-[#FF3D71] hover:bg-[#1c1c1c] font-semibold text-sm transition-colors"
         >
           Delete account
         </button>
@@ -126,30 +371,30 @@ const Setting = () => {
 };
 
 const SectionLabel = ({ text }) => (
-  <p className="px-4 pt-5 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-[#9090B0] text-left">
+  <p className="px-4 pt-5 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-[#A0A0A0] text-left">
     {text}
   </p>
 );
 
 const SettingRow = ({ label, value, arrow = true }) => (
-  <div className="flex items-center justify-between px-4 py-3.5 border-b border-[#2A2A3D] bg-[#111118]">
-    <span className="text-sm text-[#F0F0FF]">{label}</span>
+  <div className="flex items-center justify-between px-4 py-3.5 border-b border-[#222222] bg-[#111111]">
+    <span className="text-sm text-[#FFFFFF]">{label}</span>
     <div className="flex items-center gap-2">
-      <span className="text-xs text-[#9090B0]">{value}</span>
-      {arrow && <span className="text-[#9090B0] text-sm">›</span>}
+      <span className="text-xs text-[#A0A0A0]">{value}</span>
+      {arrow && <span className="text-[#A0A0A0] text-sm">›</span>}
     </div>
   </div>
 );
 
 const ToggleRow = ({ label, checked, onChange }) => (
-  <div className="flex items-center justify-between px-4 py-3.5 border-b border-[#2A2A3D] bg-[#111118]">
-    <span className="text-sm text-[#F0F0FF]">{label}</span>
+  <div className="flex items-center justify-between px-4 py-3.5 border-b border-[#222222] bg-[#111111]">
+    <span className="text-sm text-[#FFFFFF]">{label}</span>
     <button
       onClick={onChange}
       role="switch"
       aria-checked={checked}
       className={`w-10 h-6 rounded-full relative transition-colors ${
-        checked ? "bg-[#00E676]" : "bg-[#2A2A3D]"
+        checked ? "bg-[#00E676]" : "bg-[#222222]"
       }`}
     >
       <span

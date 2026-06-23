@@ -33,7 +33,7 @@ const messageSchema = new mongoose.Schema(
 
     contentType: {
       type: String,
-      enum: ["text", "image", "video", "audio"],
+      enum: ["text", "image", "video", "audio", "document", "gif"],
       default: "text",
     },
 
@@ -87,6 +87,16 @@ const messageSchema = new mongoose.Schema(
     // as a placeholder ("This message was deleted") but content/media
     // is wiped.
     isDeletedForEveryone: {
+      type: Boolean,
+      default: false,
+    },
+
+    isEdited: {
+      type: Boolean,
+      default: false,
+    },
+
+    isPinned: {
       type: Boolean,
       default: false,
     },

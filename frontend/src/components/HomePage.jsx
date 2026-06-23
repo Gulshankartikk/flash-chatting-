@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useContext } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
@@ -11,7 +11,12 @@ import {
   Settings as SettingsIcon,
   Users as UsersIcon,
   Bell,
+  Video,
+  Phone,
+  CircleDot,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { toast } from "react-toastify";
 import useChatStore from "../store/chatStore";
 import useUserStore from "../store/useUserStore";
 import useLayoutStore from "../store/useLayoutStore";
@@ -19,8 +24,12 @@ import useNotifications from "../hooks/useNotifications";
 import NotificationPanel from "./notifications/NotificationPanel";
 import { getAllUser } from "../services/user.service";
 import StatusDot from "./status/StatusDot";
+import { CallContext } from "../context/CallContext";
 
 const HomePage = () => {
+  const navigate = useNavigate();
+  const { startCall } = useContext(CallContext);
+
   // ── Chat store ──────────────────────────────
   const conversations      = useChatStore((s) => s.conversations);
   const fetchConversations = useChatStore((s) => s.fetchConversations);
@@ -35,6 +44,7 @@ const HomePage = () => {
   const setActiveView = useLayoutStore((s) => s.setActiveView);
   const contacts       = useLayoutStore((s) => s.contacts);
   const setContacts    = useLayoutStore((s) => s.setContacts);
+  const setSelectedContact = useLayoutStore((s) => s.setSelectedContact);
 
   // ── Current logged-in user ──────────────────
   const currentUser = useUserStore((s) => s.user);
@@ -82,6 +92,7 @@ const HomePage = () => {
           name:         u.username || "Unknown",
           profilePic:   u.profilePicture || "",
           isOnline:     u.isOnline || false,
+          lastSeen:     u.lastSeen || null,
           phone:        u.phoneSuffix && u.phoneNumber ? `${u.phoneSuffix} ${u.phoneNumber}` : "",
           conversation: u.conversation || null,
         }));
@@ -105,17 +116,20 @@ const HomePage = () => {
       name:            other?.username || other?.name || "Unknown",
       profilePic:      other?.profilePicture || "",
       isOnline:        other?.isOnline || false,
+      lastSeen:        other?.lastSeen || null,
       lastMessage:     conv.lastMessage?.content || conv.lastMessage?.message || "",
       lastMessageTime: conv.updatedAt,
       lastMessageMine: conv.lastMessage?.sender === currentUser?._id || conv.lastMessage?.sender?._id === currentUser?._id,
       lastMessageStatus: conv.lastMessage?.messageStatus || conv.lastMessage?.status || null,
       unreadCount:     unreadCounts[conv._id] || 0,
       _conv:           conv,
+      otherUser:       other,
     };
   });
 
   const handleChatClick = (contact) => {
     openConversation(contact._conv);
+    setSelectedContact(contact);
   };
 
   const handleStartChat = async (contact) => {
@@ -124,8 +138,20 @@ const HomePage = () => {
     try {
       if (contact.conversation) {
         openConversation(contact.conversation);
+        setSelectedContact(contact);
       } else {
-        await createConversation(contact._id);
+        const newConv = await createConversation(contact._id);
+        setSelectedContact({
+          _id: newConv._id,
+          conversationId: newConv._id,
+          otherUser: contact,
+          name: contact.name,
+          profilePic: contact.profilePic,
+          isOnline: contact.isOnline,
+          lastMessage: "",
+          unread: 0,
+          isDraft: false,
+        });
       }
       setActiveView("chats");
     } catch (err) {
@@ -151,67 +177,131 @@ const HomePage = () => {
       : date.toLocaleDateString([], { month: "short", day: "numeric" });
   };
 
+  const formatLastSeen = (value) => {
+    if (!value) return "offline";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "offline";
+    const diff = Date.now() - date.getTime();
+    const mins = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
+    if (mins < 1) return "last seen just now";
+    if (mins < 60) return `last seen ${mins}m ago`;
+    if (hours < 24) return `last seen ${hours}h ago`;
+    return `last seen ${days}d ago`;
+  };
+
   const StatusTick = ({ status }) => {
     if (!status) return null;
-    if (status === "sent") return <Check size={13} className="text-[#9090B0] flex-shrink-0" />;
-    if (status === "delivered") return <CheckCheck size={13} className="text-[#9090B0] flex-shrink-0" />;
-    if (status === "seen" || status === "read") return <CheckCheck size={13} className="text-[#00D4FF] flex-shrink-0" />;
+    if (status === "sent") return <Check size={13} className="text-[#A0A0A0] flex-shrink-0" />;
+    if (status === "delivered") return <CheckCheck size={13} className="text-[#A0A0A0] flex-shrink-0" />;
+    if (status === "seen" || status === "read") return <CheckCheck size={13} className="text-[#FFD166] flex-shrink-0" />;
     return null;
   };
 
+  const activePeer = activeConversation?.participants?.find(p => p._id !== currentUser?._id);
+
   return (
-    <div className="h-full flex flex-col bg-white dark:bg-[#0A0A0F] text-slate-800 dark:text-[#F0F0FF] font-sans relative">
+    <div className="h-full flex flex-col bg-white dark:bg-[#000000] text-slate-800 dark:text-[#FFFFFF] font-sans relative">
       {/* Header */}
-      <div className="flex-shrink-0 bg-slate-50 dark:bg-[#111118] border-b border-slate-200 dark:border-[#2A2A3D] p-4 sticky top-0 z-10">
+      <div className="flex-shrink-0 bg-slate-50 dark:bg-[#111111] border-b border-slate-200 dark:border-[#222222] p-4 sticky top-0 z-10">
         <div className="flex items-center justify-between mb-3">
-          <h1 className="text-xl font-bold tracking-tight text-slate-800 dark:text-[#F0F0FF]">
+          <h1 className="text-xl font-bold tracking-tight text-slate-800 dark:text-[#FFFFFF]">
             {isContactsView ? "Select contact" : "Flash Chat"}
           </h1>
-          <div className="flex items-center gap-1.5">
-            {/* Bell Notification Trigger */}
+          
+          {/* Quick Action Icons */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => {
+                const input = document.getElementById("home-search-input");
+                if (input) input.focus();
+              }}
+              className="p-1.5 hover:bg-slate-100 dark:hover:bg-[#1c1c1c] rounded-full text-slate-400 dark:text-[#A0A0A0] hover:text-[#FF6B00] transition-colors"
+              title="Search"
+            >
+              <Search size={18} />
+            </button>
+
+            <button
+              onClick={() => {
+                if (activePeer) {
+                  startCall(activePeer, "video");
+                } else {
+                  toast.info("Please select a conversation to start a call");
+                }
+              }}
+              className="p-1.5 hover:bg-slate-100 dark:hover:bg-[#1c1c1c] rounded-full text-slate-400 dark:text-[#A0A0A0] hover:text-[#FF6B00] transition-colors"
+              title="Video Call"
+            >
+              <Video size={18} />
+            </button>
+
+            <button
+              onClick={() => {
+                if (activePeer) {
+                  startCall(activePeer, "voice");
+                } else {
+                  toast.info("Please select a conversation to start a call");
+                }
+              }}
+              className="p-1.5 hover:bg-slate-100 dark:hover:bg-[#1c1c1c] rounded-full text-slate-400 dark:text-[#A0A0A0] hover:text-[#FF6B00] transition-colors"
+              title="Voice Call"
+            >
+              <Phone size={18} />
+            </button>
+
+            <button
+              onClick={() => navigate("/status")}
+              className="p-1.5 hover:bg-slate-100 dark:hover:bg-[#1c1c1c] rounded-full text-slate-400 dark:text-[#A0A0A0] hover:text-[#FF6B00] transition-colors"
+              title="Status"
+            >
+              <CircleDot size={18} />
+            </button>
+
             <button
               onClick={() => setNotifPanelOpen(!notifPanelOpen)}
-              className="p-2 hover:bg-slate-100 dark:hover:bg-[#1A1A26] rounded-full text-slate-400 dark:text-[#9090B0] hover:text-[#FF6584] transition-colors relative"
+              className="p-1.5 hover:bg-slate-100 dark:hover:bg-[#1c1c1c] rounded-full text-slate-400 dark:text-[#A0A0A0] hover:text-[#FF9E00] transition-colors relative"
               title="Notifications"
             >
               <Bell size={18} />
               {notifUnread > 0 && (
-                <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-[#FF6584] rounded-full animate-pulse border-2 border-white dark:border-[#111118]" />
+                <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-[#FF9E00] rounded-full animate-pulse border-2 border-white dark:border-[#111111]" />
               )}
             </button>
 
             <button
-              className="p-2 hover:bg-slate-100 dark:hover:bg-[#1A1A26] rounded-full text-slate-400 dark:text-[#9090B0] hover:text-slate-800 dark:hover:text-[#F0F0FF] transition-colors"
-              onClick={() => setActiveView(isContactsView ? "chats" : "contacts")}
-              title={isContactsView ? "Back to chats" : "New chat"}
+              onClick={() => navigate("/setting")}
+              className="p-1.5 hover:bg-slate-100 dark:hover:bg-[#1c1c1c] rounded-full text-slate-400 dark:text-[#A0A0A0] hover:text-[#FF6B00] transition-colors"
+              title="Settings"
             >
-              <MessageSquarePlus size={18} />
+              <SettingsIcon size={18} />
             </button>
 
             <div className="relative" ref={menuRef}>
               <button
-                className="p-2 hover:bg-slate-100 dark:hover:bg-[#1A1A26] rounded-full text-slate-400 dark:text-[#9090B0] hover:text-slate-800 dark:hover:text-[#F0F0FF] transition-colors"
+                className="p-1.5 hover:bg-slate-100 dark:hover:bg-[#1c1c1c] rounded-full text-slate-400 dark:text-[#A0A0A0] hover:text-slate-800 dark:hover:text-[#FFFFFF] transition-colors"
                 onClick={() => setMenuOpen(!menuOpen)}
               >
                 <MoreVertical size={18} />
               </button>
 
               {menuOpen && (
-                <div className="absolute right-0 top-full mt-1.5 bg-white dark:bg-[#1A1A26] border border-slate-200 dark:border-[#2A2A3D] rounded-xl shadow-2xl py-1 w-44 z-20 text-left">
+                <div className="absolute right-0 top-full mt-1.5 bg-white dark:bg-[#1c1c1c] border border-slate-200 dark:border-[#222222] rounded-xl shadow-2xl py-1 w-44 z-20 text-left">
                   <button
-                    className="flex items-center gap-2 px-3 py-2 text-xs text-slate-700 dark:text-[#F0F0FF] hover:bg-slate-100 dark:hover:bg-[#2A2A3D] transition-colors w-full"
+                    className="flex items-center gap-2 px-3 py-2 text-xs text-slate-700 dark:text-[#FFFFFF] hover:bg-slate-100 dark:hover:bg-[#222222] transition-colors w-full"
                     onClick={() => { setActiveView("contacts"); setMenuOpen(false); }}
                   >
-                    <UsersIcon size={14} /> New Group
+                    <UsersIcon size={14} /> Contacts List
                   </button>
                   <button
-                    className="flex items-center gap-2 px-3 py-2 text-xs text-slate-700 dark:text-[#F0F0FF] hover:bg-slate-100 dark:hover:bg-[#2A2A3D] transition-colors w-full"
-                    onClick={() => { setActiveView("settings"); setMenuOpen(false); }}
+                    className="flex items-center gap-2 px-3 py-2 text-xs text-slate-700 dark:text-[#FFFFFF] hover:bg-slate-100 dark:hover:bg-[#222222] transition-colors w-full"
+                    onClick={() => { navigate("/setting"); setMenuOpen(false); }}
                   >
                     <SettingsIcon size={14} /> Settings
                   </button>
                   <button
-                    className="flex items-center gap-2 px-3 py-2 text-xs text-[#FF3D71] hover:bg-slate-100 dark:hover:bg-[#2A2A3D] transition-colors w-full"
+                    className="flex items-center gap-2 px-3 py-2 text-xs text-[#FF3D71] hover:bg-slate-100 dark:hover:bg-[#222222] transition-colors w-full"
                     onClick={() => { setMenuOpen(false); logout && logout(); }}
                   >
                     <LogOut size={14} /> Log out
@@ -224,18 +314,19 @@ const HomePage = () => {
 
         {/* Search */}
         <div className="relative">
-          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-[#4A4A6A]" />
+          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-[#555555]" />
           <input
+            id="home-search-input"
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={isContactsView ? "Search contacts..." : "Search conversations..."}
-            className="w-full pl-9 pr-8 py-2 bg-white dark:bg-[#1A1A26] border border-slate-200 dark:border-[#2A2A3D] focus:border-[#6C63FF] rounded-xl text-xs text-slate-800 dark:text-[#F0F0FF] placeholder-slate-400 dark:placeholder-[#4A4A6A] focus:outline-none transition-colors"
+            className="w-full pl-9 pr-8 py-2 bg-white dark:bg-[#1c1c1c] border border-slate-200 dark:border-[#222222] focus:border-[#FF6B00] rounded-xl text-xs text-slate-800 dark:text-[#FFFFFF] placeholder-slate-400 dark:placeholder-[#555555] focus:outline-none transition-colors"
           />
           {query && (
             <button
               onClick={() => setQuery("")}
-              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#9090B0] hover:text-slate-800 dark:hover:text-[#F0F0FF]"
+              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#A0A0A0] hover:text-slate-800 dark:hover:text-[#FFFFFF]"
             >
               <X size={14} />
             </button>
@@ -244,13 +335,13 @@ const HomePage = () => {
       </div>
 
       {/* List Body */}
-      <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-[#2A2A3D]">
+      <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-[#222222]">
         {isLoading ? (
           <div className="flex justify-center py-10">
-            <div className="w-6 h-6 border-2 border-[#6C63FF] border-t-transparent rounded-full animate-spin" />
+            <div className="w-6 h-6 border-2 border-[#FF6B00] border-t-transparent rounded-full animate-spin" />
           </div>
         ) : filteredRows.length === 0 ? (
-          <div className="py-20 text-center text-slate-400 dark:text-[#9090B0]">
+          <div className="py-20 text-center text-slate-400 dark:text-[#A0A0A0]">
             <p className="text-xs">
               {isContactsView ? "No contacts found" : "No conversations yet. Start a new chat!"}
             </p>
@@ -269,10 +360,10 @@ const HomePage = () => {
                   onClick={() =>
                     isContactsView ? handleStartChat(row) : handleChatClick(row)
                   }
-                  className={`flex items-center gap-3.5 px-4 py-3.5 cursor-pointer transition-all border-b border-slate-100 dark:border-[#2A2A3D] ${
+                  className={`flex items-center gap-3.5 px-4 py-3.5 cursor-pointer transition-all border-b border-slate-100 dark:border-[#222222] ${
                     isSelected
-                      ? "bg-slate-100/70 dark:bg-[#1A1A26] border-l-4 border-[#6C63FF]"
-                      : "hover:bg-slate-50/50 dark:hover:bg-[#111118]/60"
+                      ? "bg-slate-100/70 dark:bg-[#1c1c1c] border-l-4 border-[#FF6B00]"
+                      : "hover:bg-slate-50/50 dark:hover:bg-[#111111]/60"
                   }`}
                 >
                   {/* Avatar & Status dot */}
@@ -281,10 +372,10 @@ const HomePage = () => {
                       <img
                         src={row.profilePic}
                         alt=""
-                        className="w-11 h-11 rounded-full object-cover border border-slate-200 dark:border-[#2A2A3D]"
+                        className="w-11 h-11 rounded-full object-cover border border-slate-200 dark:border-[#222222]"
                       />
                     ) : (
-                      <div className="w-11 h-11 rounded-full bg-slate-100 dark:bg-[#1A1A26] border border-slate-200 dark:border-[#2A2A3D] text-slate-700 dark:text-[#F0F0FF] flex items-center justify-center font-bold text-sm">
+                      <div className="w-11 h-11 rounded-full bg-slate-100 dark:bg-[#1c1c1c] border border-slate-200 dark:border-[#222222] text-slate-700 dark:text-[#FFFFFF] flex items-center justify-center font-bold text-sm">
                         {row.name.charAt(0).toUpperCase()}
                       </div>
                     )}
@@ -296,28 +387,37 @@ const HomePage = () => {
                   {/* Detail */}
                   <div className="flex-1 text-left min-w-0">
                     <div className="flex justify-between items-baseline gap-1">
-                      <h4 className="text-sm font-semibold text-slate-800 dark:text-[#F0F0FF] truncate">
+                      <h4 className="text-sm font-semibold text-slate-800 dark:text-[#FFFFFF] truncate">
                         {row.name}
                       </h4>
                       {!isContactsView && row.lastMessageTime && (
-                        <span className="text-[10px] text-slate-400 dark:text-[#9090B0]">
+                        <span className="text-[10px] text-slate-400 dark:text-[#A0A0A0]">
                           {formatPreviewTime(row.lastMessageTime)}
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center gap-1 mt-0.5">
-                      {!isContactsView && row.lastMessageMine && (
-                        <StatusTick status={row.lastMessageStatus} />
+                    <div className="flex items-center justify-between gap-1 mt-0.5">
+                      <div className="flex items-center gap-1 min-w-0 flex-1">
+                        {!isContactsView && row.lastMessageMine && (
+                          <StatusTick status={row.lastMessageStatus} />
+                        )}
+                        <p className="text-xs text-slate-400 dark:text-[#A0A0A0] truncate flex-1">
+                          {isContactsView ? "Tap to start chatting" : row.lastMessage}
+                        </p>
+                      </div>
+                      
+                      {/* Offline status last seen display */}
+                      {!row.isOnline && row.lastSeen && (
+                        <span className="text-[9px] text-[#A0A0A0] flex-shrink-0 ml-1">
+                          {formatLastSeen(row.lastSeen)}
+                        </span>
                       )}
-                      <p className="text-xs text-slate-400 dark:text-[#9090B0] truncate flex-1">
-                        {isContactsView ? "Tap to start chatting" : row.lastMessage}
-                      </p>
                     </div>
                   </div>
 
                   {/* Badge */}
                   {!isContactsView && row.unreadCount > 0 && (
-                    <span className="flex-shrink-0 min-w-[18px] h-[18px] rounded-full bg-[#FF6584] text-white text-[9px] font-bold flex items-center justify-center px-1 shadow-lg shadow-[#FF6584]/20 animate-pulse">
+                    <span className="flex-shrink-0 min-w-[18px] h-[18px] rounded-full bg-[#FF9E00] text-white text-[9px] font-bold flex items-center justify-center px-1 shadow-lg shadow-[#FF9E00]/20 animate-pulse">
                       {row.unreadCount > 99 ? "99+" : row.unreadCount}
                     </span>
                   )}
@@ -331,7 +431,7 @@ const HomePage = () => {
       {/* Floating Action Button */}
       <button
         onClick={() => setActiveView(isContactsView ? "chats" : "contacts")}
-        className="absolute bottom-4 right-4 w-12 h-12 bg-[#6C63FF] hover:bg-[#5b52e6] text-white rounded-full shadow-2xl transition-transform hover:scale-105 active:scale-95 flex items-center justify-center z-10"
+        className="absolute bottom-4 right-4 w-12 h-12 bg-[#FF6B00] hover:bg-[#E05E00] text-white rounded-full shadow-2xl transition-transform hover:scale-105 active:scale-95 flex items-center justify-center z-10"
         title={isContactsView ? "Back to chats" : "Start a new chat"}
       >
         <MessageSquarePlus size={20} />

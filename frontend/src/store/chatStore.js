@@ -3,6 +3,7 @@ import axios from "axios";
 import {
   initializeSocket,
   disconnectSocket,
+  getSocket,
   joinConversation,
   leaveConversation,
   sendMessage as emitSendMessage,
@@ -159,6 +160,31 @@ const useChatStore = create((set, get) => ({
       clearTimeout(typingTimeouts[key]);
       get().clearTypingUser(conversationId, userId);
     });
+
+    const s = getSocket();
+    if (s) {
+      s.off("message_edited");
+      s.on("message_edited", ({ messageId, content }) => {
+        set((state) => ({
+          messages: state.messages.map((m) =>
+            m._id === messageId ? { ...m, content, isEdited: true } : m
+          ),
+        }));
+      });
+
+      s.off("message_pinned");
+      s.on("message_pinned", ({ messageId, isPinned, conversationId }) => {
+        set((state) => ({
+          messages: state.messages.map((m) => {
+            if (m._id === messageId) return { ...m, isPinned };
+            if (m.conversation === conversationId || m.conversationId === conversationId) {
+              return { ...m, isPinned: false };
+            }
+            return m;
+          }),
+        }));
+      });
+    }
   },
 
   clearTypingUser: (conversationId, userId) => {
@@ -439,7 +465,7 @@ const useChatStore = create((set, get) => ({
   // ─────────────────────────────────────────────
   deleteMessage: async (messageId, deleteFor = "me") => {
     try {
-      await api.delete(`/api/messages/${messageId}`, { data: { deleteFor } });
+      await api.delete(`/api/chat/message/${messageId}`, { data: { deleteFor } });
 
       if (deleteFor === "everyone") {
         // Show "This message was deleted" placeholder — WhatsApp style
@@ -488,7 +514,7 @@ const useChatStore = create((set, get) => ({
     }));
 
     try {
-      const { data } = await api.post(`/api/messages/${messageId}/react`, {
+      const { data } = await api.post(`/api/chat/message/${messageId}/react`, {
         emoji,
       });
       const saved = data?.data || data;
@@ -520,7 +546,7 @@ const useChatStore = create((set, get) => ({
   deleteSelectedMessages: async (deleteFor = "me") => {
     const { selectedMessages } = get();
     try {
-      await api.post("/api/messages/bulk-delete", {
+      await api.post("/api/chat/message/bulk-delete", {
         messageIds: selectedMessages,
         deleteFor,
       });
@@ -541,6 +567,63 @@ const useChatStore = create((set, get) => ({
       }
     } catch (err) {
       set({ error: "Bulk delete failed" });
+    }
+  },
+
+  // ─────────────────────────────────────────────
+  // EDIT MESSAGE
+  // ─────────────────────────────────────────────
+  editMessage: async (messageId, newContent) => {
+    try {
+      const { data } = await api.put(`/api/chat/message/${messageId}`, { content: newContent });
+      const updated = data?.data || data;
+      set((s) => ({
+        messages: s.messages.map((m) => m._id === messageId ? updated : m),
+      }));
+    } catch (err) {
+      set({ error: "Edit message failed" });
+      throw err;
+    }
+  },
+
+  // ─────────────────────────────────────────────
+  // PIN MESSAGE
+  // ─────────────────────────────────────────────
+  pinMessage: async (messageId) => {
+    try {
+      const { data } = await api.put(`/api/chat/message/${messageId}/pin`);
+      const updated = data?.data || data;
+      set((s) => ({
+        messages: s.messages.map((m) => {
+          if (m._id === messageId) return updated;
+          return { ...m, isPinned: false };
+        }),
+      }));
+    } catch (err) {
+      set({ error: "Pin message failed" });
+      throw err;
+    }
+  },
+
+  // ─────────────────────────────────────────────
+  // FORWARD MESSAGE
+  // ─────────────────────────────────────────────
+  forwardMessage: async (message, targetUserIds) => {
+    const promises = targetUserIds.map(async (receiverId) => {
+      return api.post(`/api/chat/send-message`, {
+        senderId: get().currentUser?._id,
+        receiverId,
+        content: message.content || message.message || "",
+        contentType: message.contentType || message.messageType || "text",
+        imageOrVideoUrl: message.imageOrVideoUrl || null,
+      });
+    });
+    try {
+      await Promise.all(promises);
+      get().fetchConversations();
+    } catch (err) {
+      set({ error: "Forward message failed" });
+      throw err;
     }
   },
 

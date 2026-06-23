@@ -6,18 +6,18 @@
 
 @layer base {
   :root {
-    --bg-primary: #0A0A0F;
-    --bg-secondary: #111118;
-    --bg-elevated: #1A1A26;
-    --border-subtle: #2A2A3D;
+    --bg-primary: #000000;
+    --bg-secondary: #111111;
+    --bg-elevated: #1c1c1c;
+    --border-subtle: #222222;
     
-    --accent-primary: #6C63FF;
-    --accent-secondary: #FF6584;
-    --accent-glow: #00D4FF;
+    --accent-primary: #FF6B00;
+    --accent-secondary: #FF9E00;
+    --accent-glow: #FFD166;
     
-    --text-primary: #F0F0FF;
-    --text-secondary: #9090B0;
-    --text-disabled: #4A4A6A;
+    --text-primary: #FFFFFF;
+    --text-secondary: #A0A0A0;
+    --text-disabled: #555555;
     
     --success: #00E676;
     --warning: #FFB300;

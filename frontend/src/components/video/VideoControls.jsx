@@ -12,14 +12,14 @@ const VideoControls = ({
   onEndCall,
 }) => {
   return (
-    <div className="flex items-center justify-center gap-4 bg-[#111118]/80 backdrop-blur-md px-6 py-4 rounded-2xl border border-[#2A2A3D]">
+    <div className="flex items-center justify-center gap-4 bg-[#111111]/80 backdrop-blur-md px-6 py-4 rounded-2xl border border-[#222222]">
       {/* Mute Mic */}
       <button
         onClick={onToggleMic}
         className={`p-3.5 rounded-full transition-all duration-200 ${
           isMuted
-            ? "bg-[#FF6584] text-white hover:bg-[#ff5475]"
-            : "bg-[#2A2A3D] text-[#F0F0FF] hover:bg-[#3D3D56]"
+            ? "bg-[#FF9E00] text-white hover:bg-[#E08B00]"
+            : "bg-[#222222] text-[#FFFFFF] hover:bg-[#3D3D56]"
         }`}
         title={isMuted ? "Unmute Mic" : "Mute Mic"}
       >
@@ -33,7 +33,7 @@ const VideoControls = ({
           className={`p-3.5 rounded-full transition-all duration-200 ${
             isCamOff
               ? "bg-[#FF3D71] text-white hover:bg-[#ff2a61]"
-              : "bg-[#2A2A3D] text-[#F0F0FF] hover:bg-[#3D3D56]"
+              : "bg-[#222222] text-[#FFFFFF] hover:bg-[#3D3D56]"
           }`}
           title={isCamOff ? "Turn Camera On" : "Turn Camera Off"}
         >
@@ -47,8 +47,8 @@ const VideoControls = ({
           onClick={onToggleScreenShare}
           className={`p-3.5 rounded-full transition-all duration-200 ${
             isScreenSharing
-              ? "bg-[#00D4FF] text-black hover:bg-[#00c0e6]"
-              : "bg-[#2A2A3D] text-[#F0F0FF] hover:bg-[#3D3D56]"
+              ? "bg-[#FFD166] text-black hover:bg-[#E6BC5C]"
+              : "bg-[#222222] text-[#FFFFFF] hover:bg-[#3D3D56]"
           }`}
           title={isScreenSharing ? "Stop Sharing" : "Share Screen"}
         >

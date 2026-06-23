@@ -86,9 +86,45 @@ function App() {
                 </Layout>
               }
             />
-            <Route path="/user-profile" element={<UserDetail />} />
-            <Route path="/status"       element={<Status />}    />
-            <Route path="/setting"      element={<Setting />}   />
+            <Route
+              path="/user-profile"
+              element={
+                <Layout
+                  isThemeDialogOpen={isThemeDialogOpen}
+                  toggleDialog={toggleDialog}
+                  isStatusPreviewOpen={false}
+                  statusPreviewContent={null}
+                >
+                  <UserDetail />
+                </Layout>
+              }
+            />
+            <Route
+              path="/status"
+              element={
+                <Layout
+                  isThemeDialogOpen={isThemeDialogOpen}
+                  toggleDialog={toggleDialog}
+                  isStatusPreviewOpen={false}
+                  statusPreviewContent={null}
+                >
+                  <Status />
+                </Layout>
+              }
+            />
+            <Route
+              path="/setting"
+              element={
+                <Layout
+                  isThemeDialogOpen={isThemeDialogOpen}
+                  toggleDialog={toggleDialog}
+                  isStatusPreviewOpen={false}
+                  statusPreviewContent={null}
+                >
+                  <Setting />
+                </Layout>
+              }
+            />
           </Route>
 
           {/* Fallback */}

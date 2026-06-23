@@ -36,4 +36,28 @@ router.delete(
   chatController.deleteMessage
 );
 
+router.put(
+  "/message/:messageId",
+  authMiddleware,
+  chatController.editMessage
+);
+
+router.post(
+  "/message/bulk-delete",
+  authMiddleware,
+  chatController.bulkDeleteMessages
+);
+
+router.post(
+  "/message/:messageId/react",
+  authMiddleware,
+  chatController.reactToMessage
+);
+
+router.put(
+  "/message/:messageId/pin",
+  authMiddleware,
+  chatController.pinMessage
+);
+
 module.exports = router;

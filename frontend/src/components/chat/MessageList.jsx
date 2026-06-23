@@ -14,6 +14,8 @@ const MessageList = ({
   onForward,
   onReplyPreviewClick,
   onRetry,
+  onEdit,
+  onPin,
 }) => {
   const containerRef = useRef(null);
   const [showScrollFAB, setShowScrollFAB] = useState(false);
@@ -98,7 +100,7 @@ const MessageList = ({
   }, []);
 
   return (
-    <div className="flex-1 relative overflow-hidden bg-[#0A0A0F]">
+    <div className="flex-1 relative overflow-hidden bg-[#000000]">
       {/* Scrollable Container */}
       <div
         ref={containerRef}
@@ -107,7 +109,7 @@ const MessageList = ({
       >
         {isLoadingMore && (
           <div className="flex justify-center py-2">
-            <div className="w-5 h-5 border-2 border-[#6C63FF] border-t-transparent rounded-full animate-spin" />
+            <div className="w-5 h-5 border-2 border-[#FF6B00] border-t-transparent rounded-full animate-spin" />
           </div>
         )}
 
@@ -115,7 +117,7 @@ const MessageList = ({
           <React.Fragment key={group.key}>
             {/* Day Divider */}
             <div className="flex justify-center my-3.5">
-              <span className="text-[10px] uppercase font-bold tracking-wider text-[#9090B0] bg-[#1A1A26] border border-[#2A2A3D] rounded-full px-3 py-1 shadow-sm">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-[#A0A0A0] bg-[#1c1c1c] border border-[#222222] rounded-full px-3 py-1 shadow-sm">
                 {group.label}
               </span>
             </div>
@@ -131,6 +133,8 @@ const MessageList = ({
                 onReact={onReact}
                 onDelete={onDelete}
                 onForward={onForward}
+                onEdit={onEdit}
+                onPin={onPin}
                 onReplyPreviewClick={onReplyPreviewClick}
               />
             ))}
@@ -142,7 +146,7 @@ const MessageList = ({
       {showScrollFAB && (
         <button
           onClick={() => scrollToBottom("smooth")}
-          className="absolute bottom-4 right-4 p-2.5 bg-[#6C63FF] hover:bg-[#5b52e6] text-[#F0F0FF] rounded-full shadow-2xl transition-all hover:scale-105 z-10"
+          className="absolute bottom-4 right-4 p-2.5 bg-[#FF6B00] hover:bg-[#E05E00] text-[#FFFFFF] rounded-full shadow-2xl transition-all hover:scale-105 z-10"
           aria-label="Scroll to bottom"
         >
           <ArrowDown size={16} />

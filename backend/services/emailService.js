@@ -13,7 +13,9 @@ const transporter = nodemailer.createTransport({
 
 transporter.verify((error, success) => {
   if (error) {
-    console.error("Gmail service connection failed:", error.message);
+    console.log("\n⚠️  [GMAIL SERVICE] SMTP connection failed. Active email delivery is disabled.");
+    console.log("👉 Note: Development OTP fallback is active. All OTP codes will be printed to this console.");
+    console.log("👉 To enable real email sending, update EMAIL_PASS in your .env with a Google App Password.\n");
   } else {
     console.log("Gmail configured properly and ready to send email");
   }
@@ -46,8 +48,20 @@ const sendOtpToEmail = async (email, otp) => {
       html,
     });
   } catch (error) {
-    console.error("Failed to send OTP email:", error.message);
-    throw new Error("Failed to send OTP email. Please try again");
+    console.error("Failed to send OTP email via SMTP:", error.message);
+    
+    // Log the OTP to the terminal console as a fallback for development/testing
+    console.log("\n==================================================");
+    console.log("🔑 [DEVELOPMENT OTP FALLBACK]");
+    console.log(`To: ${email}`);
+    console.log(`OTP Code: ${otp}`);
+    console.log("Use this code to verify in your frontend app.");
+    console.log("==================================================\n");
+
+    // In production we must throw the error, in development we let it succeed
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("Failed to send OTP email. Please try again");
+    }
   }
 };
 

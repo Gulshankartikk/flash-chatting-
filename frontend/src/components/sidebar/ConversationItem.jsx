@@ -18,10 +18,10 @@ const ConversationItem = ({
   return (
     <div
       onClick={onClick}
-      className={`flex items-center gap-3 p-3.5 cursor-pointer border-b border-[#2A2A3D] transition-all relative ${
+      className={`flex items-center gap-3 p-3.5 cursor-pointer border-b border-[#222222] transition-all relative ${
         isActive
-          ? "bg-[#1A1A26] border-l-4 border-[#6C63FF]"
-          : "hover:bg-[#111118]/60 bg-transparent"
+          ? "bg-[#1c1c1c] border-l-4 border-[#FF6B00]"
+          : "hover:bg-[#111111]/60 bg-transparent"
       }`}
     >
       {/* Avatar Container with live status */}
@@ -30,10 +30,10 @@ const ConversationItem = ({
           <img
             src={avatar}
             alt={name}
-            className="w-11 h-11 rounded-full object-cover border border-[#2A2A3D]"
+            className="w-11 h-11 rounded-full object-cover border border-[#222222]"
           />
         ) : (
-          <div className="w-11 h-11 rounded-full bg-[#2A2A3D] text-[#F0F0FF] flex items-center justify-center font-bold text-sm">
+          <div className="w-11 h-11 rounded-full bg-[#222222] text-[#FFFFFF] flex items-center justify-center font-bold text-sm">
             {name.charAt(0).toUpperCase()}
           </div>
         )}
@@ -45,11 +45,11 @@ const ConversationItem = ({
       {/* Detail Block */}
       <div className="flex-1 text-left min-w-0">
         <div className="flex justify-between items-baseline gap-1">
-          <h4 className="text-sm font-semibold text-[#F0F0FF] truncate">
+          <h4 className="text-sm font-semibold text-[#FFFFFF] truncate">
             {name}
           </h4>
           {item.lastMessageTime && (
-            <span className="text-[10px] text-[#9090B0]">
+            <span className="text-[10px] text-[#A0A0A0]">
               {new Date(item.lastMessageTime).toLocaleTimeString([], {
                 hour: "2-digit",
                 minute: "2-digit",
@@ -61,7 +61,7 @@ const ConversationItem = ({
           {item.lastMessageMine && (
             <StatusTick status={item.lastMessageStatus} />
           )}
-          <p className="text-xs text-[#9090B0] truncate flex-1">
+          <p className="text-xs text-[#A0A0A0] truncate flex-1">
             {lastMsg}
           </p>
         </div>
@@ -69,7 +69,7 @@ const ConversationItem = ({
 
       {/* Unread count badge */}
       {unreadCount > 0 && (
-        <span className="flex-shrink-0 min-w-[18px] h-[18px] rounded-full bg-[#FF6584] text-white text-[9px] font-bold flex items-center justify-center px-1 shadow-lg shadow-[#FF6584]/20 animate-pulse">
+        <span className="flex-shrink-0 min-w-[18px] h-[18px] rounded-full bg-[#FF9E00] text-white text-[9px] font-bold flex items-center justify-center px-1 shadow-lg shadow-[#FF9E00]/20 animate-pulse">
           {unreadCount > 99 ? "99+" : unreadCount}
         </span>
       )}
@@ -78,11 +78,11 @@ const ConversationItem = ({
 };
 
 const StatusTick = ({ status }) => {
-  if (status === "sending") return <Clock size={10} className="text-[#9090B0]" />;
+  if (status === "sending") return <Clock size={10} className="text-[#A0A0A0]" />;
   if (status === "failed") return <AlertCircle size={10} className="text-[#FF3D71]" />;
-  if (status === "sent") return <Check size={11} className="text-[#9090B0]" />;
-  if (status === "delivered") return <CheckCheck size={11} className="text-[#9090B0]" />;
-  if (status === "seen" || status === "read") return <CheckCheck size={11} className="text-[#00D4FF]" />;
+  if (status === "sent") return <Check size={11} className="text-[#A0A0A0]" />;
+  if (status === "delivered") return <CheckCheck size={11} className="text-[#A0A0A0]" />;
+  if (status === "seen" || status === "read") return <CheckCheck size={11} className="text-[#FFD166]" />;
   return null;
 };
 
