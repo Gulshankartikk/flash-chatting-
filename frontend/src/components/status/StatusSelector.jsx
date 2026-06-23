@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import useSocket from "../../hooks/useSocket";
 import useUserStore from "../../store/useUserStore";
 import axios from "axios";
@@ -11,6 +11,10 @@ const StatusSelector = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [customText, setCustomText] = useState(user?.about || "");
 
+  useEffect(() => {
+    setCustomText(user?.about || "");
+  }, [user?.about]);
+
   const handleStatusChange = async (status) => {
     if (socket && user?._id) {
       socket.emit("set_status", { userId: user._id, status });
@@ -22,9 +26,11 @@ const StatusSelector = () => {
         { status },
         { withCredentials: true }
       );
+      updateProfile({ status });
       toast.success(`Status set to ${status}`);
     } catch (e) {
       console.error("Failed to update status in DB:", e);
+      toast.error("Couldn't update your status. Try again.");
     }
     setIsOpen(false);
   };
@@ -43,12 +49,14 @@ const StatusSelector = () => {
       toast.success("Status message updated");
     } catch (e) {
       console.error("Failed to update custom status text:", e);
+      toast.error("Couldn't save your status message. Try again.");
     }
   };
 
   return (
     <div className="relative text-left">
       <button
+        type="button"
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center gap-2 px-3 py-1.5 bg-[#1c1c1c] border border-[#222222] hover:border-[#FF6B00] rounded-lg text-xs font-semibold text-[#FFFFFF] transition-all"
       >
@@ -62,24 +70,28 @@ const StatusSelector = () => {
           </p>
           <div className="flex flex-col gap-1.5">
             <button
+              type="button"
               onClick={() => handleStatusChange("online")}
               className="flex items-center gap-2 px-2 py-1 hover:bg-[#222222] rounded text-xs text-[#FFFFFF] text-left"
             >
               <span className="w-2.5 h-2.5 rounded-full bg-[#FFD166]" /> Online
             </button>
             <button
+              type="button"
               onClick={() => handleStatusChange("away")}
               className="flex items-center gap-2 px-2 py-1 hover:bg-[#222222] rounded text-xs text-[#FFFFFF] text-left"
             >
               <span className="w-2.5 h-2.5 rounded-full bg-[#FFB300]" /> Away
             </button>
             <button
+              type="button"
               onClick={() => handleStatusChange("busy")}
               className="flex items-center gap-2 px-2 py-1 hover:bg-[#222222] rounded text-xs text-[#FFFFFF] text-left"
             >
               <span className="w-2.5 h-2.5 rounded-full bg-[#FF3D71]" /> Busy (DND)
             </button>
             <button
+              type="button"
               onClick={() => handleStatusChange("offline")}
               className="flex items-center gap-2 px-2 py-1 hover:bg-[#222222] rounded text-xs text-[#FFFFFF] text-left"
             >

@@ -1,108 +1,134 @@
+const mongoose = require("mongoose");
 const { uploadFileCloudinary } = require("../config/cloudinaryConfig");
 const Conversation = require("../models/conversation");
 const Message = require("../models/message");
 const response = require("../utils/responseHandler");
 
-// ================= SEND MESSAGE =================
+const EDIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes, like WhatsApp
+const DELETE_FOR_EVERYONE_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+
+// Small helper so we don't repeat the "find other participant" logic everywhere.
+// NOTE: this assumes 1:1 conversations (sender/receiver). If group chat is ever
+// added, this helper (and the schema) will need to change to participants[].
+function getOtherUserId(message, userId) {
+  const senderId = String(message.sender?._id || message.sender);
+  const receiverId = String(message.receiver?._id || message.receiver);
+  return senderId === String(userId) ? receiverId : senderId;
+}
+
+function emitToUser(req, userId, event, payload) {
+  if (!req.io || !req.socketUserMap) return;
+  const socketId = req.socketUserMap.get(String(userId));
+  if (socketId) {
+    req.io.to(socketId).emit(event, payload);
+  }
+}
+
 // ================= SEND MESSAGE =================
 exports.sendMessage = async (req, res) => {
+  const { senderId, receiverId, content, messageStatus } = req.body;
+  const file = req.file;
+
+  if (!senderId || !receiverId) {
+    return response(res, 400, "senderId and receiverId are required");
+  }
+
+  if (senderId === receiverId) {
+    return response(res, 400, "Cannot send a message to yourself");
+  }
+
+  if (!content?.trim() && !file) {
+    return response(res, 400, "Message content or media is required");
+  }
+
+  // Upload BEFORE opening the transaction. Cloudinary isn't transactional and
+  // we don't want a DB session held open during a slow external network call.
+  let imageOrVideoUrl = null;
+  let contentType = null;
+
+  if (file) {
+    let uploadFile;
+    try {
+      uploadFile = await uploadFileCloudinary(file);
+    } catch (err) {
+      console.error("Cloudinary upload error:", err);
+      return response(res, 400, "Failed to upload media");
+    }
+
+    if (!uploadFile?.secure_url) {
+      return response(res, 400, "Failed to upload media");
+    }
+
+    imageOrVideoUrl = uploadFile.secure_url;
+
+    if (file.mimetype.startsWith("image")) contentType = "image";
+    else if (file.mimetype.startsWith("video")) contentType = "video";
+    else if (file.mimetype.startsWith("audio")) contentType = "audio";
+    else contentType = "document";
+  } else {
+    contentType = "text";
+  }
+
+  const session = await mongoose.startSession();
+
   try {
-    const { senderId, receiverId, content, messageStatus } = req.body;
-    const file = req.file;
+    let newMessage;
+    let populatedMessage;
+    let wasDeliveredImmediately = false;
 
-    if (!senderId || !receiverId) {
-      return response(res, 400, "senderId and receiverId are required");
-    }
+    await session.withTransaction(async () => {
+      const participants = [senderId, receiverId].sort();
 
-    if (senderId === receiverId) {
-      return response(res, 400, "Cannot send a message to yourself");
-    }
+      let conversationDoc = await Conversation.findOne({ participants }).session(session);
 
-    const participants = [senderId, receiverId].sort();
-
-    let conversationDoc = await Conversation.findOne({ participants });
-
-    if (!conversationDoc) {
-      conversationDoc = new Conversation({ participants, unreadCounts: {} });
-      await conversationDoc.save();
-    }
-
-    let imageOrVideoUrl = null;
-    let contentType = null;
-
-    if (file) {
-      const uploadFile = await uploadFileCloudinary(file);
-
-      if (!uploadFile?.secure_url) {
-        return response(res, 400, "Failed to upload media");
+      if (!conversationDoc) {
+        conversationDoc = new Conversation({ participants, unreadCounts: new Map() });
       }
 
-      imageOrVideoUrl = uploadFile.secure_url;
+      newMessage = new Message({
+        conversation: conversationDoc._id,
+        sender: senderId,
+        receiver: receiverId,
+        content: content?.trim() || "",
+        imageOrVideoUrl,
+        contentType,
+        messageStatus: messageStatus || "sent",
+      });
 
-      if (file.mimetype.startsWith("image")) {
-        contentType = "image";
-      } else if (file.mimetype.startsWith("video")) {
-        contentType = "video";
-      } else if (file.mimetype.startsWith("audio")) {
-        contentType = "audio";
-      } else {
-        contentType = "document";
-      }
-    } else if (content?.trim()) {
-      contentType = "text";
-    } else {
-      return response(res, 400, "Message content or media is required");
-    }
-
-    const newMessage = new Message({
-      conversation: conversationDoc._id,
-      sender: senderId,
-      receiver: receiverId,
-      content: content?.trim() || "",
-      imageOrVideoUrl,
-      contentType,
-      messageStatus: messageStatus || "sent",
-    });
-
-    await newMessage.save();
-
-    conversationDoc.lastMessage = newMessage._id;
-
-    if (!conversationDoc.unreadCounts) conversationDoc.unreadCounts = new Map();
-    const currentUnread = conversationDoc.unreadCounts.get(receiverId) || 0;
-    conversationDoc.unreadCounts.set(receiverId, currentUnread + 1);
-
-    await conversationDoc.save();
-
-    // mark delivered immediately if the receiver is online
-    if (req.io && req.socketUserMap) {
-      const receiverSocketId = req.socketUserMap.get(receiverId);
-
+      // Mark delivered immediately if the receiver is currently online.
+      // Done here (pre-save) instead of as a second save, to avoid an extra write.
+      const receiverSocketId = req.socketUserMap?.get(String(receiverId));
       if (receiverSocketId) {
         newMessage.messageStatus = "delivered";
         newMessage.deliveredTo.push({ user: receiverId });
-        await newMessage.save();
+        wasDeliveredImmediately = true;
       }
-    }
 
-    const populatedMessage = await Message.findById(newMessage._id)
+      await newMessage.save({ session });
+
+      conversationDoc.lastMessage = newMessage._id;
+
+      if (!conversationDoc.unreadCounts) conversationDoc.unreadCounts = new Map();
+      const currentUnread = conversationDoc.unreadCounts.get(String(receiverId)) || 0;
+      conversationDoc.unreadCounts.set(String(receiverId), currentUnread + 1);
+
+      await conversationDoc.save({ session });
+    });
+
+    populatedMessage = await Message.findById(newMessage._id)
       .populate("sender", "username profilePicture")
       .populate("receiver", "username profilePicture")
       .populate("conversation", "participants lastMessage");
 
-    if (req.io && req.socketUserMap) {
-      const receiverSocketId = req.socketUserMap.get(receiverId);
+    const receiverSocketId = req.socketUserMap?.get(String(receiverId));
+    if (receiverSocketId) {
+      emitToUser(req, receiverId, "receive_message", populatedMessage);
 
-      if (receiverSocketId) {
-        req.io.to(receiverSocketId).emit("receive_message", populatedMessage);
-
-        const senderSocketId = req.socketUserMap.get(senderId);
-        if (senderSocketId) {
-          req.io.to(senderSocketId).emit("message_status_update", {
-            messageId: newMessage._id,
-            messageStatus: "delivered",
-          });
-        }
+      if (wasDeliveredImmediately) {
+        emitToUser(req, senderId, "message_status_update", {
+          messageId: newMessage._id,
+          messageStatus: "delivered",
+        });
       }
     }
 
@@ -110,6 +136,8 @@ exports.sendMessage = async (req, res) => {
   } catch (error) {
     console.error(error);
     return response(res, 500, "Internal server error");
+  } finally {
+    session.endSession();
   }
 };
 
@@ -133,7 +161,7 @@ exports.getConversation = async (req, res) => {
 
     const formatted = conversations.map((conv) => {
       const obj = conv.toObject();
-      obj.unreadCount = conv.unreadCounts?.get(userId.toString()) || 0;
+      obj.unreadCount = conv.unreadCounts?.get(String(userId)) || 0;
       delete obj.unreadCounts;
       return obj;
     });
@@ -174,7 +202,7 @@ exports.getMessage = async (req, res) => {
       .sort({ createdAt: -1 })
       .limit(limit);
 
-    // mark this user's incoming, unseen messages as seen
+    // Mark this user's incoming, unseen messages as seen.
     const toMarkSeen = messages.filter(
       (m) =>
         String(m.receiver?._id || m.receiver) === String(userId) &&
@@ -193,20 +221,18 @@ exports.getMessage = async (req, res) => {
         }
       );
 
-      if (req.io && req.socketUserMap) {
-        for (const msg of toMarkSeen) {
-          const senderSocketId = req.socketUserMap.get(String(msg.sender._id || msg.sender));
-          if (senderSocketId) {
-            req.io.to(senderSocketId).emit("message_status_update", {
-              messageId: msg._id,
-              messageStatus: "seen",
-            });
-          }
-        }
+      for (const msg of toMarkSeen) {
+        emitToUser(req, msg.sender._id || msg.sender, "message_status_update", {
+          messageId: msg._id,
+          messageStatus: "seen",
+        });
       }
     }
 
-    if (conversationDoc.unreadCounts?.get(String(userId))) {
+    // Only reset unread count when the viewer is looking at the latest page
+    // (no `before` cursor). Paginating backward into history shouldn't zero
+    // out unread state for messages the viewer hasn't actually reached yet.
+    if (!before && conversationDoc.unreadCounts?.get(String(userId))) {
       conversationDoc.unreadCounts.set(String(userId), 0);
       await conversationDoc.save();
     }
@@ -246,15 +272,22 @@ exports.markAsRead = async (req, res) => {
       }
     );
 
-    if (req.io && req.socketUserMap) {
-      for (const msg of messages) {
-        const senderSocketId = req.socketUserMap.get(String(msg.sender));
-        if (senderSocketId) {
-          req.io.to(senderSocketId).emit("message_status_update", {
-            messageId: msg._id,
-            messageStatus: "seen",
-          });
-        }
+    for (const msg of messages) {
+      emitToUser(req, msg.sender, "message_status_update", {
+        messageId: msg._id,
+        messageStatus: "seen",
+      });
+    }
+
+    // Keep the conversation list's unread badge in sync. Without this, a
+    // client that calls markAsRead directly (without hitting getMessage)
+    // would leave a stale unread count on the conversation.
+    const conversationIds = [...new Set(messages.map((m) => String(m.conversation)))];
+    for (const convId of conversationIds) {
+      const conversationDoc = await Conversation.findById(convId);
+      if (conversationDoc?.unreadCounts?.get(String(userId))) {
+        conversationDoc.unreadCounts.set(String(userId), 0);
+        await conversationDoc.save();
       }
     }
 
@@ -270,8 +303,6 @@ exports.deleteMessage = async (req, res) => {
   const { messageId } = req.params;
   const { deleteForEveryone } = req.body;
   const userId = req.user.userId;
-
-  const DELETE_FOR_EVERYONE_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 
   try {
     const messageDoc = await Message.findById(messageId);
@@ -293,6 +324,10 @@ exports.deleteMessage = async (req, res) => {
         return response(res, 403, "Only the sender can delete this message for everyone");
       }
 
+      if (messageDoc.isDeletedForEveryone) {
+        return response(res, 400, "Message already deleted");
+      }
+
       const age = Date.now() - messageDoc.createdAt.getTime();
       if (age > DELETE_FOR_EVERYONE_WINDOW_MS) {
         return response(res, 400, "Too late to delete this message for everyone");
@@ -303,19 +338,11 @@ exports.deleteMessage = async (req, res) => {
       messageDoc.isDeletedForEveryone = true;
       await messageDoc.save();
 
-      if (req.io && req.socketUserMap) {
-        const otherUserId =
-          String(messageDoc.sender) === String(userId)
-            ? messageDoc.receiver
-            : messageDoc.sender;
-        const otherSocketId = req.socketUserMap.get(String(otherUserId));
-        if (otherSocketId) {
-          req.io.to(otherSocketId).emit("message_deleted", {
-            messageId: messageDoc._id,
-            deleteForEveryone: true,
-          });
-        }
-      }
+      const otherUserId = getOtherUserId(messageDoc, userId);
+      emitToUser(req, otherUserId, "message_deleted", {
+        messageId: messageDoc._id,
+        deleteForEveryone: true,
+      });
 
       return response(res, 200, "Message deleted for everyone");
     }
@@ -325,6 +352,12 @@ exports.deleteMessage = async (req, res) => {
       await messageDoc.save();
     }
 
+    // Sync "delete for me" across the deleter's own other sessions/devices.
+    emitToUser(req, userId, "message_deleted", {
+      messageId: messageDoc._id,
+      deleteForEveryone: false,
+    });
+
     return response(res, 200, "Message deleted for you");
   } catch (error) {
     console.error(error);
@@ -332,7 +365,7 @@ exports.deleteMessage = async (req, res) => {
   }
 };
 
-// ================= ADD / UPDATE REACTION =================
+// ================= ADD / REMOVE / UPDATE REACTION =================
 exports.reactToMessage = async (req, res) => {
   const { messageId } = req.params;
   const { emoji } = req.body;
@@ -357,30 +390,34 @@ exports.reactToMessage = async (req, res) => {
       return response(res, 403, "Unauthorized");
     }
 
-    const existing = messageDoc.reactions.find((r) => String(r.user) === String(userId));
+    const existingIndex = messageDoc.reactions.findIndex(
+      (r) => String(r.user) === String(userId)
+    );
+    let action;
 
-    if (existing) {
-      existing.emoji = emoji; // replace previous reaction, like WhatsApp
+    if (existingIndex !== -1) {
+      if (messageDoc.reactions[existingIndex].emoji === emoji) {
+        // Tapping the same emoji again removes it, like WhatsApp.
+        messageDoc.reactions.splice(existingIndex, 1);
+        action = "removed";
+      } else {
+        messageDoc.reactions[existingIndex].emoji = emoji;
+        action = "updated";
+      }
     } else {
       messageDoc.reactions.push({ user: userId, emoji });
+      action = "added";
     }
 
     await messageDoc.save();
 
-    if (req.io && req.socketUserMap) {
-      const otherUserId =
-        String(messageDoc.sender) === String(userId)
-          ? messageDoc.receiver
-          : messageDoc.sender;
-      const otherSocketId = req.socketUserMap.get(String(otherUserId));
-      if (otherSocketId) {
-        req.io.to(otherSocketId).emit("message_reaction", {
-          messageId: messageDoc._id,
-          userId,
-          emoji,
-        });
-      }
-    }
+    const otherUserId = getOtherUserId(messageDoc, userId);
+    emitToUser(req, otherUserId, "message_reaction", {
+      messageId: messageDoc._id,
+      userId,
+      emoji: action === "removed" ? null : emoji,
+      action,
+    });
 
     return response(res, 200, "Reaction updated", messageDoc.reactions);
   } catch (error) {
@@ -395,6 +432,10 @@ exports.editMessage = async (req, res) => {
   const { content } = req.body;
   const userId = req.user.userId;
 
+  if (!content?.trim()) {
+    return response(res, 400, "Content is required to edit a message");
+  }
+
   try {
     const message = await Message.findById(messageId);
     if (!message) return response(res, 404, "Message not found");
@@ -403,7 +444,20 @@ exports.editMessage = async (req, res) => {
       return response(res, 403, "You can only edit your own messages");
     }
 
-    message.content = content;
+    if (message.isDeletedForEveryone) {
+      return response(res, 400, "Cannot edit a deleted message");
+    }
+
+    if (message.contentType !== "text") {
+      return response(res, 400, "Only text messages can be edited");
+    }
+
+    const age = Date.now() - message.createdAt.getTime();
+    if (age > EDIT_WINDOW_MS) {
+      return response(res, 400, "Too late to edit this message");
+    }
+
+    message.content = content.trim();
     message.isEdited = true;
     await message.save();
 
@@ -411,22 +465,12 @@ exports.editMessage = async (req, res) => {
       .populate("sender", "username profilePicture")
       .populate("receiver", "username profilePicture");
 
-    if (req.io && req.socketUserMap) {
-      const otherUserId =
-        String(populated.sender._id) === String(userId)
-          ? populated.receiver?._id
-          : populated.sender._id;
-      if (otherUserId) {
-        const otherSocketId = req.socketUserMap.get(String(otherUserId));
-        if (otherSocketId) {
-          req.io.to(otherSocketId).emit("message_edited", {
-            messageId: populated._id,
-            content: populated.content,
-            isEdited: true,
-          });
-        }
-      }
-    }
+    const otherUserId = getOtherUserId(populated, userId);
+    emitToUser(req, otherUserId, "message_edited", {
+      messageId: populated._id,
+      content: populated.content,
+      isEdited: true,
+    });
 
     return response(res, 200, "Message edited successfully", populated);
   } catch (error) {
@@ -446,47 +490,61 @@ exports.bulkDeleteMessages = async (req, res) => {
 
   try {
     if (deleteFor === "everyone") {
-      // "Delete for everyone" only allows sender to delete
-      const messages = await Message.find({ _id: { $in: messageIds }, sender: userId });
+      const cutoff = new Date(Date.now() - DELETE_FOR_EVERYONE_WINDOW_MS);
+
+      // Only the sender can wipe a message, and only within the time window.
+      const messages = await Message.find({
+        _id: { $in: messageIds },
+        sender: userId,
+        isDeletedForEveryone: { $ne: true },
+        createdAt: { $gte: cutoff },
+      });
+
       const idsToWipe = messages.map((m) => m._id);
 
-      await Message.updateMany(
-        { _id: { $in: idsToWipe } },
-        {
-          $set: {
-            content: "",
-            imageOrVideoUrl: null,
-            isDeletedForEveryone: true,
-          },
-        }
-      );
-
-      if (req.io && req.socketUserMap) {
-        messages.forEach((msg) => {
-          const otherUserId =
-            String(msg.sender) === String(userId)
-              ? msg.receiver
-              : msg.sender;
-          if (otherUserId) {
-            const otherSocketId = req.socketUserMap.get(String(otherUserId));
-            if (otherSocketId) {
-              req.io.to(otherSocketId).emit("message_deleted", {
-                messageId: msg._id,
-                deleteForEveryone: true,
-              });
-            }
+      if (idsToWipe.length > 0) {
+        await Message.updateMany(
+          { _id: { $in: idsToWipe } },
+          {
+            $set: {
+              content: "",
+              imageOrVideoUrl: null,
+              isDeletedForEveryone: true,
+            },
           }
-        });
+        );
       }
+
+      messages.forEach((msg) => {
+        const otherUserId = getOtherUserId(msg, userId);
+        emitToUser(req, otherUserId, "message_deleted", {
+          messageId: msg._id,
+          deleteForEveryone: true,
+        });
+      });
+
+      const skipped = messageIds.length - idsToWipe.length;
+      return response(
+        res,
+        200,
+        skipped > 0
+          ? `${idsToWipe.length} message(s) deleted, ${skipped} skipped (not yours or too old)`
+          : "Messages deleted successfully"
+      );
     } else {
       // "Delete for me"
       await Message.updateMany(
         { _id: { $in: messageIds } },
         { $addToSet: { deletedFor: userId } }
       );
-    }
 
-    return response(res, 200, "Messages deleted successfully");
+      emitToUser(req, userId, "messages_deleted", {
+        messageIds,
+        deleteForEveryone: false,
+      });
+
+      return response(res, 200, "Messages deleted successfully");
+    }
   } catch (error) {
     console.error(error);
     return response(res, 500, "Internal server error");
@@ -498,54 +556,60 @@ exports.pinMessage = async (req, res) => {
   const { messageId } = req.params;
   const userId = req.user.userId;
 
+  const session = await mongoose.startSession();
+
   try {
-    const message = await Message.findById(messageId);
-    if (!message) return response(res, 404, "Message not found");
+    let populated;
 
-    const isParticipant =
-      String(message.sender) === String(userId) ||
-      String(message.receiver) === String(userId);
-
-    if (!isParticipant) {
-      return response(res, 403, "Unauthorized");
-    }
-
-    // Toggle pin status
-    message.isPinned = !message.isPinned;
-    await message.save();
-
-    // If pinning a new message, unpin all other messages in this conversation (WhatsApp only allows 1 pinned message per chat)
-    if (message.isPinned) {
-      await Message.updateMany(
-        { conversation: message.conversation, _id: { $ne: messageId } },
-        { $set: { isPinned: false } }
-      );
-    }
-
-    const populated = await Message.findById(message._id)
-      .populate("sender", "username profilePicture")
-      .populate("receiver", "username profilePicture");
-
-    if (req.io && req.socketUserMap) {
-      const otherUserId =
-        String(populated.sender._id) === String(userId)
-          ? populated.receiver?._id
-          : populated.sender._id;
-      if (otherUserId) {
-        const otherSocketId = req.socketUserMap.get(String(otherUserId));
-        if (otherSocketId) {
-          req.io.to(otherSocketId).emit("message_pinned", {
-            messageId: populated._id,
-            isPinned: populated.isPinned,
-            conversationId: populated.conversation,
-          });
-        }
+    await session.withTransaction(async () => {
+      const message = await Message.findById(messageId).session(session);
+      if (!message) {
+        throw Object.assign(new Error("Message not found"), { statusCode: 404 });
       }
-    }
+
+      const isParticipant =
+        String(message.sender) === String(userId) ||
+        String(message.receiver) === String(userId);
+
+      if (!isParticipant) {
+        throw Object.assign(new Error("Unauthorized"), { statusCode: 403 });
+      }
+
+      message.isPinned = !message.isPinned;
+      await message.save({ session });
+
+      // WhatsApp only allows one pinned message per chat. Unpinning the
+      // others happens inside the same transaction as the toggle above, so
+      // two near-simultaneous pin requests can't both end up pinned.
+      if (message.isPinned) {
+        await Message.updateMany(
+          { conversation: message.conversation, _id: { $ne: messageId } },
+          { $set: { isPinned: false } },
+          { session }
+        );
+      }
+
+      populated = await Message.findById(message._id)
+        .session(session)
+        .populate("sender", "username profilePicture")
+        .populate("receiver", "username profilePicture");
+    });
+
+    const otherUserId = getOtherUserId(populated, userId);
+    emitToUser(req, otherUserId, "message_pinned", {
+      messageId: populated._id,
+      isPinned: populated.isPinned,
+      conversationId: populated.conversation,
+    });
 
     return response(res, 200, "Message pin toggled successfully", populated);
   } catch (error) {
+    if (error.statusCode) {
+      return response(res, error.statusCode, error.message);
+    }
     console.error(error);
     return response(res, 500, "Internal server error");
+  } finally {
+    session.endSession();
   }
 };

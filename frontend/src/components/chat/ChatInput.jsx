@@ -1,6 +1,24 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Paperclip, Smile, Send, X, File, Video } from "lucide-react";
 import ReplyPreview from "./ReplyPreview";
+
+const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB
+const MAX_MESSAGE_LENGTH = 4000; // adjust to match your backend's content limit
+
+// Small curated set so this stays dependency-free. Swap for a library like
+// emoji-picker-react if you want search/categories/skin-tone variants later.
+const EMOJI_OPTIONS = [
+  "😀", "😂", "😍", "😊", "😢", "😡", "👍", "👎",
+  "🙏", "🎉", "❤️", "🔥", "😮", "🤔", "😴", "👏",
+  "🙌", "💀", "😎", "🥳", "😅", "🤝", "✅", "❌",
+];
+
+function formatFileSize(bytes) {
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 const ChatInput = ({
   onSend,
@@ -15,9 +33,51 @@ const ChatInput = ({
   const [selectedFile, setSelectedFile] = useState(null);
   const [filePreview, setFilePreview] = useState(null);
   const [fileType, setFileType] = useState("text"); // "text" | "image" | "video" | "audio" | "document"
+  const [fileError, setFileError] = useState(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
   const fileInputRef = useRef(null);
+  const textInputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+  const emojiPickerRef = useRef(null);
+  const emojiButtonRef = useRef(null);
+
+  // Stop the "typing..." indicator from getting stuck if the component
+  // unmounts (e.g. user navigates away) while a timeout is still pending.
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      if (onTypingStop) onTypingStop();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Revoke the object URL whenever it changes or the component unmounts,
+  // not just when explicitly cancelled — covers the "picked a different
+  // file before sending/cancelling" case the old code missed.
+  useEffect(() => {
+    return () => {
+      if (filePreview) URL.revokeObjectURL(filePreview);
+    };
+  }, [filePreview]);
+
+  // Close the emoji picker on outside click.
+  useEffect(() => {
+    if (!showEmojiPicker) return;
+
+    const handleClickOutside = (e) => {
+      if (
+        emojiPickerRef.current &&
+        !emojiPickerRef.current.contains(e.target) &&
+        !emojiButtonRef.current?.contains(e.target)
+      ) {
+        setShowEmojiPicker(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showEmojiPicker]);
 
   const handleTextChange = (e) => {
     setDraft(e.target.value);
@@ -34,6 +94,16 @@ const ChatInput = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    setFileError(null);
+
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      setFileError(`File is too large. Max size is ${formatFileSize(MAX_FILE_SIZE_BYTES)}.`);
+      e.target.value = ""; // allow re-selecting the same file after dismissing
+      return;
+    }
+
+    // Revoking happens automatically via the filePreview useEffect cleanup
+    // above when filePreview changes below, so no manual revoke needed here.
     setSelectedFile(file);
     const mime = file.type;
 
@@ -50,16 +120,19 @@ const ChatInput = ({
       setFileType("document");
       setFilePreview(null);
     }
+
+    // Reset the input value so selecting the same file again later still
+    // fires onChange (browsers won't fire it if the value is unchanged).
+    e.target.value = "";
   };
 
-  const handleCancelFile = () => {
-    if (filePreview) {
-      URL.revokeObjectURL(filePreview);
-    }
+  const handleCancelFile = useCallback(() => {
+    // filePreview revocation is handled by the useEffect cleanup; just clear state.
     setSelectedFile(null);
     setFilePreview(null);
     setFileType("text");
-  };
+    setFileError(null);
+  }, []);
 
   const handleSendClick = () => {
     const trimmed = draft.trim();
@@ -80,16 +153,27 @@ const ChatInput = ({
     }
 
     setDraft("");
+    setShowEmojiPicker(false);
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     if (onTypingStop) onTypingStop();
   };
 
   const handleKeyDown = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    // isComposing / keyCode 229 guards against IME composition (Japanese,
+    // Chinese, Korean, etc.) where Enter confirms a candidate rather than
+    // submitting the message.
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) {
       e.preventDefault();
       handleSendClick();
     }
   };
+
+  const handleEmojiSelect = (emoji) => {
+    setDraft((prev) => prev + emoji);
+    textInputRef.current?.focus();
+  };
+
+  const isOverLimit = draft.length > MAX_MESSAGE_LENGTH;
 
   return (
     <div className="flex flex-col bg-slate-50 dark:bg-[#111111] border-t border-slate-200 dark:border-[#222222] z-10 flex-shrink-0">
@@ -100,6 +184,20 @@ const ChatInput = ({
           onCancel={onCancelReply}
           otherUserName={otherUserName}
         />
+      )}
+
+      {/* File Error Banner */}
+      {fileError && (
+        <div className="flex items-center justify-between px-3 py-2 bg-red-50 dark:bg-[#2a1414] border-t border-red-200 dark:border-[#3a1f1f] text-xs text-red-600 dark:text-[#FF6B6B]">
+          <span>{fileError}</span>
+          <button
+            onClick={() => setFileError(null)}
+            className="p-1 hover:bg-red-100 dark:hover:bg-[#3a1f1f] rounded-full"
+            aria-label="Dismiss error"
+          >
+            <X size={14} />
+          </button>
+        </div>
       )}
 
       {/* File Preview Bar */}
@@ -129,13 +227,14 @@ const ChatInput = ({
                 {selectedFile.name}
               </p>
               <p className="text-[10px] text-slate-400 dark:text-[#A0A0A0]">
-                {(selectedFile.size / 1024).toFixed(1)} KB
+                {formatFileSize(selectedFile.size)}
               </p>
             </div>
           </div>
           <button
             onClick={handleCancelFile}
             className="p-1 hover:bg-slate-200 dark:hover:bg-[#222222] rounded-full text-slate-400 dark:text-[#A0A0A0] hover:text-[#FF3D71]"
+            aria-label="Remove attached file"
           >
             <X size={16} />
           </button>
@@ -143,7 +242,7 @@ const ChatInput = ({
       )}
 
       {/* Main Input Row */}
-      <div className="flex items-center gap-3 p-3">
+      <div className="relative flex items-center gap-3 p-3">
         <input
           type="file"
           ref={fileInputRef}
@@ -154,29 +253,73 @@ const ChatInput = ({
           onClick={() => fileInputRef.current?.click()}
           className="p-2 hover:bg-slate-200 dark:hover:bg-[#1c1c1c] rounded-full text-slate-400 dark:text-[#A0A0A0] hover:text-[#FF6B00] transition-colors"
           title="Attach File"
+          aria-label="Attach file"
         >
           <Paperclip size={20} />
         </button>
 
         <button
-          className="p-2 hover:bg-slate-200 dark:hover:bg-[#1c1c1c] rounded-full text-slate-400 dark:text-[#A0A0A0] hover:text-[#FF9E00] transition-colors"
+          ref={emojiButtonRef}
+          onClick={() => setShowEmojiPicker((prev) => !prev)}
+          className={`p-2 hover:bg-slate-200 dark:hover:bg-[#1c1c1c] rounded-full transition-colors ${
+            showEmojiPicker
+              ? "text-[#FF9E00] bg-slate-200 dark:bg-[#1c1c1c]"
+              : "text-slate-400 dark:text-[#A0A0A0] hover:text-[#FF9E00]"
+          }`}
           title="Emojis"
+          aria-label="Open emoji picker"
+          aria-expanded={showEmojiPicker}
         >
           <Smile size={20} />
         </button>
 
-        <input
-          type="text"
-          value={draft}
-          onChange={handleTextChange}
-          onKeyDown={handleKeyDown}
-          placeholder={selectedFile ? "Add a caption..." : "Type a message..."}
-          className="flex-1 px-4 py-2.5 rounded-full bg-white dark:bg-[#1c1c1c] text-slate-800 dark:text-[#FFFFFF] placeholder-slate-400 dark:placeholder-[#555555] border border-slate-200 dark:border-[#222222] focus:outline-none focus:border-[#FF6B00] text-sm transition-colors"
-        />
+        {showEmojiPicker && (
+          <div
+            ref={emojiPickerRef}
+            role="dialog"
+            aria-label="Emoji picker"
+            className="absolute bottom-full left-3 mb-2 grid grid-cols-8 gap-1 p-2 bg-white dark:bg-[#1c1c1c] border border-slate-200 dark:border-[#222222] rounded-xl shadow-lg z-20"
+          >
+            {EMOJI_OPTIONS.map((emoji) => (
+              <button
+                key={emoji}
+                onClick={() => handleEmojiSelect(emoji)}
+                className="text-xl p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-[#2a2a2a] transition-colors"
+                aria-label={`Insert ${emoji}`}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="flex-1 flex flex-col">
+          <input
+            ref={textInputRef}
+            type="text"
+            value={draft}
+            onChange={handleTextChange}
+            onKeyDown={handleKeyDown}
+            placeholder={selectedFile ? "Add a caption..." : "Type a message..."}
+            aria-label="Message"
+            maxLength={MAX_MESSAGE_LENGTH + 100} // small buffer; isOverLimit drives the real block
+            className={`px-4 py-2.5 rounded-full bg-white dark:bg-[#1c1c1c] text-slate-800 dark:text-[#FFFFFF] placeholder-slate-400 dark:placeholder-[#555555] border text-sm transition-colors focus:outline-none ${
+              isOverLimit
+                ? "border-red-400 focus:border-red-500"
+                : "border-slate-200 dark:border-[#222222] focus:border-[#FF6B00]"
+            }`}
+          />
+          {isOverLimit && (
+            <span className="text-[10px] text-red-500 mt-1 ml-2">
+              {draft.length}/{MAX_MESSAGE_LENGTH} — message is too long
+            </span>
+          )}
+        </div>
 
         <button
           onClick={handleSendClick}
-          disabled={!draft.trim() && !selectedFile}
+          disabled={(!draft.trim() && !selectedFile) || isOverLimit}
+          aria-label="Send message"
           className="p-2.5 bg-[#FF6B00] hover:bg-[#E05E00] disabled:bg-slate-100 dark:disabled:bg-[#1c1c1c] text-white disabled:text-slate-400 dark:disabled:text-[#555555] rounded-full transition-colors flex-shrink-0"
         >
           <Send size={16} />

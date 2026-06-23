@@ -2,6 +2,13 @@ const { uploadFileCloudinary } = require("../config/cloudinaryConfig");
 const Status = require("../models/status");
 const response = require("../utils/responseHandler");
 
+// NOTE: this app doesn't have a contacts/friends feature yet, so status
+// visibility is intentionally NOT scoped here — createStatus/deleteStatus
+// broadcast to every connected user, and getStatus returns every active
+// status on the platform. This matches your original behavior. If you add
+// a contacts feature later, the places to add filtering are marked below
+// with "CONTACT SCOPING GOES HERE".
+
 // ================= CREATE STATUS =================
 exports.createStatus = async (req, res) => {
   try {
@@ -9,8 +16,23 @@ exports.createStatus = async (req, res) => {
     const userId = req.user.userId;
     const file = req.file;
 
-    let mediaUrl = null;
     let finalContentType = "text";
+
+    // Validate file type BEFORE uploading, so we don't pay for/store an
+    // upload to Cloudinary for a file type we're about to reject.
+    if (file) {
+      if (file.mimetype.startsWith("image")) {
+        finalContentType = "image";
+      } else if (file.mimetype.startsWith("video")) {
+        finalContentType = "video";
+      } else {
+        return response(res, 400, "Unsupported file type");
+      }
+    } else if (!content?.trim()) {
+      return response(res, 400, "Status content or media is required");
+    }
+
+    let mediaUrl = null;
 
     if (file) {
       const uploadFile = await uploadFileCloudinary(file);
@@ -20,18 +42,6 @@ exports.createStatus = async (req, res) => {
       }
 
       mediaUrl = uploadFile.secure_url;
-
-      if (file.mimetype.startsWith("image")) {
-        finalContentType = "image";
-      } else if (file.mimetype.startsWith("video")) {
-        finalContentType = "video";
-      } else {
-        return response(res, 400, "Unsupported file type");
-      }
-    } else if (content?.trim()) {
-      finalContentType = "text";
-    } else {
-      return response(res, 400, "Status content or media is required");
     }
 
     const expiresAt = new Date();
@@ -39,7 +49,8 @@ exports.createStatus = async (req, res) => {
 
     const newStatus = new Status({
       user: userId,
-      content: mediaUrl || content,
+      content: content?.trim() || "",
+      mediaUrl,
       contentType: finalContentType,
       expiresAt,
     });
@@ -50,11 +61,12 @@ exports.createStatus = async (req, res) => {
       .populate("user", "username profilePicture")
       .populate("viewers", "username profilePicture");
 
-    // broadcast to all connected users except the creator, so their
-    // status list updates live (like WhatsApp's status tray)
+    // CONTACT SCOPING GOES HERE: broadcasts to every connected user since
+    // there's no contacts feature yet. Once you have one, filter
+    // req.socketUserMap entries down to this user's contacts before emitting.
     if (req.io && req.socketUserMap) {
       for (const [connectedId, socketId] of req.socketUserMap) {
-        if (connectedId !== userId) {
+        if (connectedId !== String(userId)) {
           req.io.to(socketId).emit("new_status", populatedStatus);
         }
       }
@@ -72,6 +84,9 @@ exports.getStatus = async (req, res) => {
   const userId = req.user.userId;
 
   try {
+    // CONTACT SCOPING GOES HERE: fetches every active status on the
+    // platform since there's no contacts feature yet. Once you have one,
+    // add `user: { $in: [...contactIds, String(userId)] }` to this query.
     const statuses = await Status.find({
       expiresAt: { $gt: new Date() },
     })
@@ -79,9 +94,9 @@ exports.getStatus = async (req, res) => {
       .populate("viewers", "username profilePicture")
       .sort({ createdAt: 1 }); // oldest first within each user's tray
 
-    // group into "my status" + "contacts' statuses", each contact
-    // bucketed with all their active updates — mirrors how the
-    // status tab actually renders, instead of a flat list
+    // Group into "my status" + "contacts' statuses", each contact bucketed
+    // with all their active updates — mirrors how the status tab renders,
+    // instead of a flat list.
     const grouped = {};
 
     for (const status of statuses) {
@@ -124,35 +139,45 @@ exports.viewStatus = async (req, res) => {
       return response(res, 404, "Status not found");
     }
 
-    const alreadyViewed = status.viewers.some((v) => String(v) === String(userId));
+    if (status.expiresAt <= new Date()) {
+      return response(res, 410, "Status has expired");
+    }
 
-    if (!alreadyViewed) {
-      status.viewers.push(userId);
-      await status.save();
+    // Owners viewing their own status shouldn't be recorded as a viewer,
+    // and shouldn't trigger a "someone viewed your status" notification
+    // to themselves.
+    const isOwner = String(status.user) === String(userId);
 
-      const updatedStatus = await Status.findById(statusId)
-        .populate("user", "username profilePicture")
-        .populate("viewers", "username profilePicture");
+    if (isOwner) {
+      return response(res, 200, "Status viewed successfully");
+    }
 
-      if (req.io && req.socketUserMap) {
-        const statusOwnerSocketId = req.socketUserMap.get(
-          updatedStatus.user._id.toString()
-        );
+    // Atomic add — avoids a read-then-write race where two near-simultaneous
+    // view requests from the same user could both pass an "already viewed"
+    // check before either save lands, double-adding the viewer.
+    const updateResult = await Status.updateOne(
+      { _id: statusId, viewers: { $ne: userId } },
+      { $addToSet: { viewers: userId } }
+    );
 
-        if (statusOwnerSocketId) {
-          const viewData = {
-            statusId,
-            viewerId: userId,
-            totalViewers: updatedStatus.viewers.length,
-            viewers: updatedStatus.viewers,
-          };
-          req.io.to(statusOwnerSocketId).emit("status_viewed", viewData);
-        } else {
-          console.log("Status owner not connected");
-        }
+    const isNewView = updateResult.modifiedCount > 0;
+
+    if (isNewView && req.io && req.socketUserMap) {
+      const updatedStatus = await Status.findById(statusId).populate(
+        "viewers",
+        "username profilePicture"
+      );
+
+      const statusOwnerSocketId = req.socketUserMap.get(String(status.user));
+
+      if (statusOwnerSocketId) {
+        req.io.to(statusOwnerSocketId).emit("status_viewed", {
+          statusId,
+          viewerId: userId,
+          totalViewers: updatedStatus.viewers.length,
+          viewers: updatedStatus.viewers,
+        });
       }
-    } else {
-      console.log("User already viewed the status");
     }
 
     return response(res, 200, "Status viewed successfully");
@@ -174,15 +199,17 @@ exports.deleteStatus = async (req, res) => {
       return response(res, 404, "Status not found");
     }
 
-    if (status.user.toString() !== userId) {
+    if (String(status.user) !== String(userId)) {
       return response(res, 403, "Not authorized to delete this status");
     }
 
     await status.deleteOne();
 
+    // CONTACT SCOPING GOES HERE: same as createStatus above — broadcasts to
+    // every connected user until a contacts feature exists.
     if (req.io && req.socketUserMap) {
       for (const [connectedId, socketId] of req.socketUserMap) {
-        if (connectedId !== userId) {
+        if (connectedId !== String(userId)) {
           req.io.to(socketId).emit("status_deleted", statusId);
         }
       }

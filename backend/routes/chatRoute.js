@@ -19,7 +19,7 @@ router.get(
 );
 
 router.get(
-  "/conversation/:conversationId/:message",
+ "/conversation/:conversationId/message",
   authMiddleware,
   chatController.getMessage
 );

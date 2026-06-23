@@ -13,10 +13,103 @@ import {
   FileText,
   Edit2,
   Pin,
+  X,
 } from "lucide-react";
 import { toast } from "react-toastify";
 
 const QUICK_REACTIONS = ["❤️", "😂", "👍", "😮", "😢", "🔥"];
+
+// Unicode property escapes (requires the `u` regex flag) — correctly matches
+// emoji without relying on hand-rolled surrogate-pair ranges that are easy
+// to get subtly wrong (the old regex's low-surrogate range started one
+// code point too early: \ud000 is a high surrogate, not a low one).
+const EMOJI_REGEX = /^(?:\p{Extended_Pictographic}|\p{Emoji_Component})+$/u;
+
+function isOnlyEmojis(str) {
+  if (!str) return false;
+  const cleanStr = str.replace(/\s/g, "");
+  if (!cleanStr) return false;
+  return EMOJI_REGEX.test(cleanStr) && [...cleanStr].length <= 3;
+}
+
+function formatTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function getFileName(url) {
+  if (!url) return "Document";
+  const parts = url.split("/");
+  const lastPart = parts[parts.length - 1];
+  try {
+    return decodeURIComponent(lastPart);
+  } catch {
+    return lastPart;
+  }
+}
+
+// Shared media-attachment renderer for image/gif — was duplicated verbatim
+// before aside from alt text; now a single source of truth.
+const MediaAttachment = ({ url, alt, onOpen }) => (
+  <div className="rounded overflow-hidden mb-2 max-w-xs bg-black/40">
+    <img
+      src={url}
+      alt={alt}
+      className="max-h-60 object-cover w-full cursor-zoom-in"
+      onClick={onOpen}
+    />
+  </div>
+);
+
+// Simple in-app lightbox for images/GIFs/videos, replacing window.open.
+// Closes on backdrop click, the X button, or Escape.
+const Lightbox = ({ url, type, onClose }) => {
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  if (!url) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Media preview"
+    >
+      <button
+        onClick={onClose}
+        className="absolute top-4 right-4 p-2 text-white hover:bg-white/10 rounded-full transition-colors"
+        aria-label="Close preview"
+      >
+        <X size={22} />
+      </button>
+
+      <div onClick={(e) => e.stopPropagation()} className="max-w-full max-h-full">
+        {type === "video" ? (
+          <video src={url} controls autoPlay className="max-h-[85vh] max-w-full rounded-lg" />
+        ) : (
+          <img src={url} alt="Full size attachment" className="max-h-[85vh] max-w-full rounded-lg object-contain" />
+        )}
+      </div>
+    </div>
+  );
+};
+
+const StatusTick = ({ status }) => {
+  if (status === "sending") return <Clock size={10} className="text-[#A0A0A0]" />;
+  if (status === "failed") return <AlertCircle size={10} className="text-[#FF3D71]" />;
+  if (status === "sent") return <Check size={11} className="text-[#A0A0A0]" />;
+  if (status === "delivered") return <CheckCheck size={11} className="text-[#A0A0A0]" />;
+  if (status === "seen" || status === "read") return <CheckCheck size={11} className="text-[#FFD166]" />;
+  return null;
+};
 
 const MessageBubble = ({
   msg,
@@ -29,14 +122,20 @@ const MessageBubble = ({
   onEdit,
   onPin,
   currentUserId,
+  otherUserName,
 }) => {
   const [hovered, setHovered] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [contextMenuOpen, setContextMenuOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState("");
+  const [lightboxUrl, setLightboxUrl] = useState(null);
+  const [lightboxType, setLightboxType] = useState(null);
+
   const pickerRef = useRef(null);
   const menuRef = useRef(null);
+  const editTextareaRef = useRef(null);
+  const rootRef = useRef(null);
 
   const isMine = msg.sender?._id === currentUserId || msg.sender === currentUserId || msg.isMine;
   const reactions = msg.reactions || [];
@@ -48,8 +147,15 @@ const MessageBubble = ({
         setPickerOpen(false);
       }
     };
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") setPickerOpen(false);
+    };
     document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKeyDown);
+    };
   }, [pickerOpen]);
 
   useEffect(() => {
@@ -59,15 +165,25 @@ const MessageBubble = ({
         setContextMenuOpen(false);
       }
     };
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") setContextMenuOpen(false);
+    };
     document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKeyDown);
+    };
   }, [contextMenuOpen]);
 
-  const formatTime = (value) => {
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return "";
-    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  };
+  // Autofocus + select-all when entering edit mode, so the user can start
+  // typing immediately instead of having to click into the textarea first.
+  useEffect(() => {
+    if (isEditing && editTextareaRef.current) {
+      editTextareaRef.current.focus();
+      editTextareaRef.current.select();
+    }
+  }, [isEditing]);
 
   const handlePickReaction = (emoji) => {
     setPickerOpen(false);
@@ -88,18 +204,17 @@ const MessageBubble = ({
     setIsEditing(false);
   };
 
-  const getFileName = (url) => {
-    if (!url) return "Document";
-    const parts = url.split("/");
-    const lastPart = parts[parts.length - 1];
-    try {
-      return decodeURIComponent(lastPart);
-    } catch (e) {
-      return lastPart;
+  const handleEditKeyDown = (e) => {
+    if (e.key === "Escape") {
+      setIsEditing(false);
+    } else if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+      e.preventDefault();
+      handleEditSubmit();
     }
   };
 
-  // Group reactions
+  // Group reactions by emoji, tracking whether the current user is among
+  // the reactors (drives the "mine" highlight state).
   const groupedReactions = reactions.reduce((acc, r) => {
     if (!acc[r.emoji]) acc[r.emoji] = { emoji: r.emoji, count: 0, mine: false };
     acc[r.emoji].count += 1;
@@ -110,13 +225,6 @@ const MessageBubble = ({
   }, {});
   const reactionList = Object.values(groupedReactions);
 
-  const isOnlyEmojis = (str) => {
-    if (!str) return false;
-    const emojiRegex = /^(?:\u00a9|\u00ae|[\u2000-\u3300]|\ud83c[\ud000-\udfff]|\ud83d[\ud000-\udfff]|\ud83e[\ud000-\udfff])+$/;
-    const cleanStr = str.replace(/\s/g, "");
-    return emojiRegex.test(cleanStr) && [...cleanStr].length <= 3;
-  };
-
   const isImage = msg.contentType === "image" || msg.messageType === "image" || (msg.imageOrVideoUrl && !msg.contentType && !msg.imageOrVideoUrl.endsWith(".gif"));
   const isVideo = msg.contentType === "video" || msg.messageType === "video";
   const isAudio = msg.contentType === "audio" || msg.messageType === "audio";
@@ -125,12 +233,37 @@ const MessageBubble = ({
 
   const isPureEmoji = isOnlyEmojis(msg.content || msg.message) && !isImage && !isVideo && !isAudio && !isDocument && !isGif;
 
+  const isDeleted = msg.isDeletedForEveryone || msg.isDeleted;
+
+  const openLightbox = (url, type) => {
+    setLightboxUrl(url);
+    setLightboxType(type);
+  };
+
+  // Reply preview shows the actual other participant's name instead of a
+  // hardcoded "Contact" placeholder.
+  const replySenderLabel = (() => {
+    if (!msg.replyTo) return "";
+    const replySenderId = msg.replyTo.sender?._id || msg.replyTo.sender;
+    return String(replySenderId) === String(currentUserId) ? "You" : (otherUserName || "Contact");
+  })();
+
   return (
     <div
-      className="flex w-full mb-2 px-4 relative justify-end"
+      ref={rootRef}
+      className="flex w-full mb-2 px-4 relative"
       style={{ justifyContent: isMine ? "flex-end" : "flex-start" }}
       onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => {
+      onMouseLeave={(e) => {
+        // Only collapse hover/picker/menu once the pointer has actually left
+        // the whole bubble+controls group (rootRef), not just the inner div
+        // that triggered mouseenter. relatedTarget is the element the mouse
+        // is moving INTO; if it's still inside rootRef (e.g. the emoji
+        // picker or context menu, which are positioned absolutely but
+        // nested inside rootRef), we don't close anything.
+        if (rootRef.current && rootRef.current.contains(e.relatedTarget)) {
+          return;
+        }
         setHovered(false);
         setPickerOpen(false);
         setContextMenuOpen(false);
@@ -162,16 +295,19 @@ const MessageBubble = ({
             </div>
           )}
 
-          {msg.isDeletedForEveryone || msg.isDeleted ? (
+          {isDeleted ? (
             <p className="text-xs italic text-[#555555] flex items-center gap-2">
               🚫 This message was deleted
             </p>
           ) : isEditing ? (
             <div className="flex flex-col gap-2 min-w-[200px]">
               <textarea
+                ref={editTextareaRef}
                 value={editText}
                 onChange={(e) => setEditText(e.target.value)}
+                onKeyDown={handleEditKeyDown}
                 rows={2}
+                aria-label="Edit message"
                 className="w-full p-2 bg-slate-50 dark:bg-black text-slate-800 dark:text-[#FFFFFF] border border-slate-200 dark:border-[#222222] focus:border-[#FF6B00] rounded-xl text-xs outline-none resize-none"
               />
               <div className="flex justify-end gap-1.5">
@@ -184,7 +320,7 @@ const MessageBubble = ({
                 <button
                   onClick={handleEditSubmit}
                   disabled={!editText.trim()}
-                  className="px-2.5 py-1 text-[10px] bg-[#FF6B00] rounded-lg text-white hover:bg-[#E05E00]"
+                  className="px-2.5 py-1 text-[10px] bg-[#FF6B00] rounded-lg text-white hover:bg-[#E05E00] disabled:opacity-50"
                 >
                   Save
                 </button>
@@ -197,9 +333,7 @@ const MessageBubble = ({
                   onClick={() => onReplyPreviewClick && onReplyPreviewClick(msg.replyTo)}
                   className="border-l-2 border-[#FFD166] bg-black/25 rounded p-2 mb-2 text-left cursor-pointer"
                 >
-                  <p className="text-xs font-semibold text-[#FFD166]">
-                    {msg.replyTo.sender === currentUserId ? "You" : "Contact"}
-                  </p>
+                  <p className="text-xs font-semibold text-[#FFD166]">{replySenderLabel}</p>
                   <p className="text-xs text-[#A0A0A0] truncate">
                     {msg.replyTo.content || msg.replyTo.message || "Media"}
                   </p>
@@ -207,30 +341,27 @@ const MessageBubble = ({
               )}
 
               {isImage && msg.imageOrVideoUrl && (
-                <div className="rounded overflow-hidden mb-2 max-w-xs bg-black/40">
-                  <img
-                    src={msg.imageOrVideoUrl}
-                    alt="Attachment"
-                    className="max-h-60 object-cover w-full cursor-zoom-in"
-                    onClick={() => window.open(msg.imageOrVideoUrl, "_blank")}
-                  />
-                </div>
+                <MediaAttachment
+                  url={msg.imageOrVideoUrl}
+                  alt="Attachment"
+                  onOpen={() => openLightbox(msg.imageOrVideoUrl, "image")}
+                />
               )}
 
               {isGif && msg.imageOrVideoUrl && (
-                <div className="rounded overflow-hidden mb-2 max-w-xs bg-black/40">
-                  <img
-                    src={msg.imageOrVideoUrl}
-                    alt="GIF Attachment"
-                    className="max-h-60 object-cover w-full cursor-zoom-in"
-                    onClick={() => window.open(msg.imageOrVideoUrl, "_blank")}
-                  />
-                </div>
+                <MediaAttachment
+                  url={msg.imageOrVideoUrl}
+                  alt="GIF Attachment"
+                  onOpen={() => openLightbox(msg.imageOrVideoUrl, "image")}
+                />
               )}
 
               {isVideo && msg.imageOrVideoUrl && (
-                <div className="rounded overflow-hidden mb-2 max-w-xs bg-black/40">
-                  <video src={msg.imageOrVideoUrl} controls className="max-h-60 w-full" />
+                <div
+                  className="rounded overflow-hidden mb-2 max-w-xs bg-black/40 cursor-zoom-in"
+                  onClick={() => openLightbox(msg.imageOrVideoUrl, "video")}
+                >
+                  <video src={msg.imageOrVideoUrl} className="max-h-60 w-full pointer-events-none" />
                 </div>
               )}
 
@@ -262,7 +393,7 @@ const MessageBubble = ({
                 </div>
               )}
 
-              {(msg.content || msg.message) && (!isPureEmoji) ? (
+              {(msg.content || msg.message) && !isPureEmoji ? (
                 <p className="text-[14.5px] leading-relaxed break-words text-left">
                   {msg.content || msg.message}
                 </p>
@@ -276,9 +407,7 @@ const MessageBubble = ({
               <div className={`flex items-center justify-end gap-1.5 mt-1 text-[10px] text-[#A0A0A0]/80 ${isPureEmoji ? "absolute bottom-1 right-2 bg-black/60 rounded px-1" : ""}`}>
                 <span>{formatTime(msg.createdAt)}</span>
                 {msg.isEdited && <span className="text-[9px] italic">(edited)</span>}
-                {isMine && (
-                  <StatusTick status={msg.messageStatus || msg.status} />
-                )}
+                {isMine && <StatusTick status={msg.messageStatus || msg.status} />}
               </div>
             </>
           )}
@@ -290,6 +419,7 @@ const MessageBubble = ({
                 <button
                   key={r.emoji}
                   onClick={() => handlePickReaction(r.emoji)}
+                  aria-label={`React with ${r.emoji}${r.mine ? " (tap to remove your reaction)" : ""}`}
                   className={`text-xs hover:scale-125 transition-transform ${r.mine ? "opacity-100" : "opacity-80"}`}
                 >
                   {r.emoji} <span className="text-[9px] font-bold">{r.count > 1 ? r.count : ""}</span>
@@ -300,10 +430,11 @@ const MessageBubble = ({
         </div>
 
         {/* Hover Controls */}
-        {hovered && !(msg.isDeletedForEveryone || msg.isDeleted) && !isEditing && (
+        {hovered && !isDeleted && !isEditing && (
           <div className="flex items-center gap-1">
             <button
               onClick={() => setPickerOpen(true)}
+              aria-label="Add reaction"
               className="p-1.5 hover:bg-slate-100 dark:hover:bg-[#1c1c1c] rounded-full text-slate-400 dark:text-[#A0A0A0] hover:text-slate-800 dark:hover:text-[#FFFFFF] transition-colors"
               title="Add reaction"
             >
@@ -311,6 +442,7 @@ const MessageBubble = ({
             </button>
             <button
               onClick={() => onReply && onReply(msg)}
+              aria-label="Reply"
               className="p-1.5 hover:bg-slate-100 dark:hover:bg-[#1c1c1c] rounded-full text-slate-400 dark:text-[#A0A0A0] hover:text-slate-800 dark:hover:text-[#FFFFFF] transition-colors"
               title="Reply"
             >
@@ -318,6 +450,7 @@ const MessageBubble = ({
             </button>
             <button
               onClick={() => setContextMenuOpen(true)}
+              aria-label="More options"
               className="p-1.5 hover:bg-slate-100 dark:hover:bg-[#1c1c1c] rounded-full text-slate-400 dark:text-[#A0A0A0] hover:text-slate-800 dark:hover:text-[#FFFFFF] transition-colors"
               title="More"
             >
@@ -330,6 +463,8 @@ const MessageBubble = ({
         {pickerOpen && (
           <div
             ref={pickerRef}
+            role="menu"
+            aria-label="Quick reactions"
             className="absolute bottom-full mb-2 bg-white dark:bg-[#1c1c1c] border border-slate-200 dark:border-[#222222] rounded-full py-1 px-3 flex gap-2.5 shadow-xl z-20"
             style={{ [isMine ? "right" : "left"]: 0 }}
           >
@@ -337,7 +472,8 @@ const MessageBubble = ({
               <button
                 key={emoji}
                 onClick={() => handlePickReaction(emoji)}
-                className="text-lg hover:scale-135 transition-transform"
+                aria-label={`React with ${emoji}`}
+                className="text-lg hover:scale-125 transition-transform"
               >
                 {emoji}
               </button>
@@ -349,7 +485,9 @@ const MessageBubble = ({
         {contextMenuOpen && (
           <div
             ref={menuRef}
-            className="absolute bottom-full mb-2 bg-white dark:bg-[#1c1c1c] border border-slate-200 dark:border-[#222222] rounded-lg py-1 flex flex-col shadow-2xl w-36 z-25 text-left"
+            role="menu"
+            aria-label="Message options"
+            className="absolute bottom-full mb-2 bg-white dark:bg-[#1c1c1c] border border-slate-200 dark:border-[#222222] rounded-lg py-1 flex flex-col shadow-2xl w-36 z-30 text-left"
             style={{ [isMine ? "right" : "left"]: 0 }}
           >
             <button
@@ -411,17 +549,19 @@ const MessageBubble = ({
           </div>
         )}
       </div>
+
+      {lightboxUrl && (
+        <Lightbox
+          url={lightboxUrl}
+          type={lightboxType}
+          onClose={() => {
+            setLightboxUrl(null);
+            setLightboxType(null);
+          }}
+        />
+      )}
     </div>
   );
-};
-
-const StatusTick = ({ status }) => {
-  if (status === "sending") return <Clock size={10} className="text-[#A0A0A0]" />;
-  if (status === "failed") return <AlertCircle size={10} className="text-[#FF3D71]" />;
-  if (status === "sent") return <Check size={11} className="text-[#A0A0A0]" />;
-  if (status === "delivered") return <CheckCheck size={11} className="text-[#A0A0A0]" />;
-  if (status === "seen" || status === "read") return <CheckCheck size={11} className="text-[#FFD166]" />;
-  return null;
 };
 
 export default MessageBubble;

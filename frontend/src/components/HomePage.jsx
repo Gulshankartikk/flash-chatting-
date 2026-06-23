@@ -1,19 +1,9 @@
 import React, { useState, useEffect, useRef, useContext } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Search,
-  MoreVertical,
-  MessageSquarePlus,
-  X,
-  Check,
-  CheckCheck,
-  LogOut,
-  Settings as SettingsIcon,
-  Users as UsersIcon,
-  Bell,
-  Video,
-  Phone,
-  CircleDot,
+  Search, MoreVertical, MessageSquarePlus, X,
+  Check, CheckCheck, LogOut, Settings as SettingsIcon,
+  Users as UsersIcon, Bell, Video, Phone, CircleDot,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
@@ -30,7 +20,7 @@ const HomePage = () => {
   const navigate = useNavigate();
   const { startCall } = useContext(CallContext);
 
-  // ── Chat store ──────────────────────────────
+  // ── Chat store ──────────────────────────────────────────────────────────
   const conversations      = useChatStore((s) => s.conversations);
   const fetchConversations = useChatStore((s) => s.fetchConversations);
   const openConversation   = useChatStore((s) => s.openConversation);
@@ -39,48 +29,47 @@ const HomePage = () => {
   const unreadCounts       = useChatStore((s) => s.unreadCounts);
   const isLoading          = useChatStore((s) => s.isLoadingConversations);
 
-  // ── Layout store ──────────────────
-  const activeView    = useLayoutStore((s) => s.activeView);
-  const setActiveView = useLayoutStore((s) => s.setActiveView);
-  const contacts       = useLayoutStore((s) => s.contacts);
-  const setContacts    = useLayoutStore((s) => s.setContacts);
+  // ── Layout store ────────────────────────────────────────────────────────
+  const activeView         = useLayoutStore((s) => s.activeView);
+  const setActiveView      = useLayoutStore((s) => s.setActiveView);
+  const contacts           = useLayoutStore((s) => s.contacts);
+  const setContacts        = useLayoutStore((s) => s.setContacts);
   const setSelectedContact = useLayoutStore((s) => s.setSelectedContact);
 
-  // ── Current logged-in user ──────────────────
+  // ── User store ──────────────────────────────────────────────────────────
   const currentUser = useUserStore((s) => s.user);
   const logout      = useUserStore((s) => s.logout);
 
-  // ── Notifications hook ──────────────────
+  // ── Notifications ───────────────────────────────────────────────────────
   const {
-    notifications,
-    unreadCount: notifUnread,
-    markAllAsRead,
-    clearNotification,
+    notifications, unreadCount: notifUnread,
+    markAllAsRead, clearNotification,
   } = useNotifications();
 
-  const [query, setQuery] = useState("");
-  const [, setIsLoadingContacts] = useState(false);
-  const [startingChatId, setStartingChatId] = useState(null);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [notifPanelOpen, setNotifPanelOpen] = useState(false);
+  const [query, setQuery]               = useState("");
+  const [isLoadingContacts, setIsLoadingContacts] = useState(false);
+  const [startingChatId, setStartingChatId]       = useState(null);
+  const [menuOpen, setMenuOpen]         = useState(false);
+  const [notifPanelOpen, setNotifPanelOpen]       = useState(false);
   const menuRef = useRef(null);
 
+  // Close dropdown on outside click
   useEffect(() => {
     if (!menuOpen) return;
     const onDocClick = (e) => {
-      if (menuRef.current && !menuRef.current.contains(e.target)) {
-        setMenuOpen(false);
-      }
+      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
     };
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
   }, [menuOpen]);
 
+  // Fetch conversations on mount
   useEffect(() => {
     fetchConversations();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Fetch all users for the contacts list
   useEffect(() => {
     const loadUsers = async () => {
       setIsLoadingContacts(true);
@@ -88,17 +77,21 @@ const HomePage = () => {
         const res = await getAllUser();
         const users = res?.data || [];
         const mapped = users.map((u) => ({
-          _id:          u._id,
-          name:         u.username || "Unknown",
-          profilePic:   u.profilePicture || "",
-          isOnline:     u.isOnline || false,
-          lastSeen:     u.lastSeen || null,
-          phone:        u.phoneSuffix && u.phoneNumber ? `${u.phoneSuffix} ${u.phoneNumber}` : "",
-          conversation: u.conversation || null,
+          _id:        u._id,
+          name:       u.username || u.name || "Unknown",
+          profilePic: u.profilePicture || "",
+          isOnline:   u.isOnline || false,
+          lastSeen:   u.lastSeen || null,
+          phone:      u.phoneSuffix && u.phoneNumber
+                        ? `${u.phoneSuffix} ${u.phoneNumber}`
+                        : "",
+          // keep the raw backend object so createConversation gets full data
+          _raw: u,
         }));
         setContacts(mapped);
       } catch (err) {
         console.error("Failed to load contacts:", err);
+        toast.error("Could not load contacts");
       } finally {
         setIsLoadingContacts(false);
       }
@@ -107,66 +100,102 @@ const HomePage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── Build chat rows from conversations ──────────────────────────────────
   const chatRows = conversations.map((conv) => {
-    const other = conv.participants?.find(
-      (p) => p._id !== currentUser?._id
-    );
+    const other = conv.participants?.find((p) => p._id !== currentUser?._id);
     return {
-      _id:             conv._id,
-      name:            other?.username || other?.name || "Unknown",
-      profilePic:      other?.profilePicture || "",
-      isOnline:        other?.isOnline || false,
-      lastSeen:        other?.lastSeen || null,
-      lastMessage:     conv.lastMessage?.content || conv.lastMessage?.message || "",
-      lastMessageTime: conv.updatedAt,
-      lastMessageMine: conv.lastMessage?.sender === currentUser?._id || conv.lastMessage?.sender?._id === currentUser?._id,
+      _id:               conv._id,
+      name:              other?.username || other?.name || "Unknown",
+      profilePic:        other?.profilePicture || "",
+      isOnline:          other?.isOnline || false,
+      lastSeen:          other?.lastSeen || null,
+      lastMessage:       conv.lastMessage?.content || conv.lastMessage?.message || "",
+      lastMessageTime:   conv.updatedAt,
+      lastMessageMine:
+        conv.lastMessage?.sender === currentUser?._id ||
+        conv.lastMessage?.sender?._id === currentUser?._id,
       lastMessageStatus: conv.lastMessage?.messageStatus || conv.lastMessage?.status || null,
-      unreadCount:     unreadCounts[conv._id] || 0,
-      _conv:           conv,
-      otherUser:       other,
+      unreadCount:       unreadCounts[conv._id] || 0,
+      _conv:             conv,
+      otherUser:         other,
     };
   });
 
-  const handleChatClick = (contact) => {
-    openConversation(contact._conv);
-    setSelectedContact(contact);
+  // ── Handlers ────────────────────────────────────────────────────────────
+
+  // Click on an existing conversation row
+  const handleChatClick = (row) => {
+    openConversation(row._conv);
+    setSelectedContact(row);
   };
 
+  // Click on a contact to start / reopen a chat
   const handleStartChat = async (contact) => {
     if (startingChatId) return;
     setStartingChatId(contact._id);
+
     try {
-      if (contact.conversation) {
-        openConversation(contact.conversation);
-        setSelectedContact(contact);
-      } else {
-        const newConv = await createConversation(contact._id);
+      // Check if a real conversation already exists for this contact
+      const existing = conversations.find((c) =>
+        c.participants?.some((p) => p._id === contact._id)
+      );
+
+      if (existing) {
+        // Reopen the existing conversation
+        openConversation(existing);
+        const other = existing.participants?.find((p) => p._id !== currentUser?._id);
         setSelectedContact({
-          _id: newConv._id,
-          conversationId: newConv._id,
-          otherUser: contact,
-          name: contact.name,
+          _id:        existing._id,
+          name:       other?.username || other?.name || contact.name,
+          profilePic: other?.profilePicture || contact.profilePic,
+          isOnline:   other?.isOnline || contact.isOnline,
+          lastMessage: existing.lastMessage?.content || "",
+          unreadCount: 0,
+          _conv:       existing,
+          otherUser:   other,
+        });
+      } else {
+        // ✅ BUG FIX: pass the full participant object, not just the id
+        const participant = {
+          _id:            contact._id,
+          username:       contact.name,
+          name:           contact.name,
+          profilePicture: contact.profilePic,
+          isOnline:       contact.isOnline,
+          lastSeen:       contact.lastSeen,
+        };
+        const draftConv = createConversation(participant);
+
+        setSelectedContact({
+          _id:        draftConv._id,
+          name:       contact.name,
           profilePic: contact.profilePic,
-          isOnline: contact.isOnline,
+          isOnline:   contact.isOnline,
           lastMessage: "",
-          unread: 0,
-          isDraft: false,
+          unreadCount: 0,
+          _conv:       draftConv,
+          otherUser:   participant,
+          isDraft:     true,
         });
       }
+
       setActiveView("chats");
     } catch (err) {
       console.error("Failed to start conversation:", err);
+      toast.error("Could not open chat");
     } finally {
       setStartingChatId(null);
     }
   };
 
+  // ── Filtering ───────────────────────────────────────────────────────────
   const isContactsView = activeView === "contacts";
-  const baseRows = isContactsView ? contacts : chatRows;
-  const filteredRows = baseRows.filter((c) =>
+  const baseRows       = isContactsView ? contacts : chatRows;
+  const filteredRows   = baseRows.filter((c) =>
     c.name?.toLowerCase().includes(query.toLowerCase())
   );
 
+  // ── Formatters ──────────────────────────────────────────────────────────
   const formatPreviewTime = (value) => {
     if (!value) return "";
     const date = new Date(value);
@@ -182,75 +211,62 @@ const HomePage = () => {
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return "offline";
     const diff = Date.now() - date.getTime();
-    const mins = Math.floor(diff / 60000);
+    const mins  = Math.floor(diff / 60000);
     const hours = Math.floor(diff / 3600000);
-    const days = Math.floor(diff / 86400000);
-    if (mins < 1) return "last seen just now";
-    if (mins < 60) return `last seen ${mins}m ago`;
+    const days  = Math.floor(diff / 86400000);
+    if (mins  <  1) return "last seen just now";
+    if (mins  < 60) return `last seen ${mins}m ago`;
     if (hours < 24) return `last seen ${hours}h ago`;
     return `last seen ${days}d ago`;
   };
 
   const StatusTick = ({ status }) => {
     if (!status) return null;
-    if (status === "sent") return <Check size={13} className="text-[#A0A0A0] flex-shrink-0" />;
-    if (status === "delivered") return <CheckCheck size={13} className="text-[#A0A0A0] flex-shrink-0" />;
-    if (status === "seen" || status === "read") return <CheckCheck size={13} className="text-[#FFD166] flex-shrink-0" />;
+    if (status === "sent")
+      return <Check size={13} className="text-[#A0A0A0] flex-shrink-0" />;
+    if (status === "delivered")
+      return <CheckCheck size={13} className="text-[#A0A0A0] flex-shrink-0" />;
+    if (status === "seen" || status === "read")
+      return <CheckCheck size={13} className="text-[#FFD166] flex-shrink-0" />;
     return null;
   };
 
-  const activePeer = activeConversation?.participants?.find(p => p._id !== currentUser?._id);
+  const activePeer = activeConversation?.participants?.find(
+    (p) => p._id !== currentUser?._id
+  );
 
   return (
     <div className="h-full flex flex-col bg-white dark:bg-[#000000] text-slate-800 dark:text-[#FFFFFF] font-sans relative">
-      {/* Header */}
+
+      {/* ── Header ── */}
       <div className="flex-shrink-0 bg-slate-50 dark:bg-[#111111] border-b border-slate-200 dark:border-[#222222] p-4 sticky top-0 z-10">
         <div className="flex items-center justify-between mb-3">
           <h1 className="text-xl font-bold tracking-tight text-slate-800 dark:text-[#FFFFFF]">
             {isContactsView ? "Select contact" : "Flash Chat"}
           </h1>
-          
-          {/* Quick Action Icons */}
+
           <div className="flex items-center gap-1">
             <button
-              onClick={() => {
-                const input = document.getElementById("home-search-input");
-                if (input) input.focus();
-              }}
+              onClick={() => document.getElementById("home-search-input")?.focus()}
               className="p-1.5 hover:bg-slate-100 dark:hover:bg-[#1c1c1c] rounded-full text-slate-400 dark:text-[#A0A0A0] hover:text-[#FF6B00] transition-colors"
               title="Search"
             >
               <Search size={18} />
             </button>
-
             <button
-              onClick={() => {
-                if (activePeer) {
-                  startCall(activePeer, "video");
-                } else {
-                  toast.info("Please select a conversation to start a call");
-                }
-              }}
+              onClick={() => activePeer ? startCall(activePeer, "video") : toast.info("Select a conversation first")}
               className="p-1.5 hover:bg-slate-100 dark:hover:bg-[#1c1c1c] rounded-full text-slate-400 dark:text-[#A0A0A0] hover:text-[#FF6B00] transition-colors"
               title="Video Call"
             >
               <Video size={18} />
             </button>
-
             <button
-              onClick={() => {
-                if (activePeer) {
-                  startCall(activePeer, "voice");
-                } else {
-                  toast.info("Please select a conversation to start a call");
-                }
-              }}
+              onClick={() => activePeer ? startCall(activePeer, "voice") : toast.info("Select a conversation first")}
               className="p-1.5 hover:bg-slate-100 dark:hover:bg-[#1c1c1c] rounded-full text-slate-400 dark:text-[#A0A0A0] hover:text-[#FF6B00] transition-colors"
               title="Voice Call"
             >
               <Phone size={18} />
             </button>
-
             <button
               onClick={() => navigate("/status")}
               className="p-1.5 hover:bg-slate-100 dark:hover:bg-[#1c1c1c] rounded-full text-slate-400 dark:text-[#A0A0A0] hover:text-[#FF6B00] transition-colors"
@@ -258,7 +274,6 @@ const HomePage = () => {
             >
               <CircleDot size={18} />
             </button>
-
             <button
               onClick={() => setNotifPanelOpen(!notifPanelOpen)}
               className="p-1.5 hover:bg-slate-100 dark:hover:bg-[#1c1c1c] rounded-full text-slate-400 dark:text-[#A0A0A0] hover:text-[#FF9E00] transition-colors relative"
@@ -269,7 +284,6 @@ const HomePage = () => {
                 <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-[#FF9E00] rounded-full animate-pulse border-2 border-white dark:border-[#111111]" />
               )}
             </button>
-
             <button
               onClick={() => navigate("/setting")}
               className="p-1.5 hover:bg-slate-100 dark:hover:bg-[#1c1c1c] rounded-full text-slate-400 dark:text-[#A0A0A0] hover:text-[#FF6B00] transition-colors"
@@ -280,29 +294,28 @@ const HomePage = () => {
 
             <div className="relative" ref={menuRef}>
               <button
-                className="p-1.5 hover:bg-slate-100 dark:hover:bg-[#1c1c1c] rounded-full text-slate-400 dark:text-[#A0A0A0] hover:text-slate-800 dark:hover:text-[#FFFFFF] transition-colors"
                 onClick={() => setMenuOpen(!menuOpen)}
+                className="p-1.5 hover:bg-slate-100 dark:hover:bg-[#1c1c1c] rounded-full text-slate-400 dark:text-[#A0A0A0] hover:text-slate-800 dark:hover:text-[#FFFFFF] transition-colors"
               >
                 <MoreVertical size={18} />
               </button>
-
               {menuOpen && (
                 <div className="absolute right-0 top-full mt-1.5 bg-white dark:bg-[#1c1c1c] border border-slate-200 dark:border-[#222222] rounded-xl shadow-2xl py-1 w-44 z-20 text-left">
                   <button
-                    className="flex items-center gap-2 px-3 py-2 text-xs text-slate-700 dark:text-[#FFFFFF] hover:bg-slate-100 dark:hover:bg-[#222222] transition-colors w-full"
                     onClick={() => { setActiveView("contacts"); setMenuOpen(false); }}
+                    className="flex items-center gap-2 px-3 py-2 text-xs text-slate-700 dark:text-[#FFFFFF] hover:bg-slate-100 dark:hover:bg-[#222222] transition-colors w-full"
                   >
                     <UsersIcon size={14} /> Contacts List
                   </button>
                   <button
-                    className="flex items-center gap-2 px-3 py-2 text-xs text-slate-700 dark:text-[#FFFFFF] hover:bg-slate-100 dark:hover:bg-[#222222] transition-colors w-full"
                     onClick={() => { navigate("/setting"); setMenuOpen(false); }}
+                    className="flex items-center gap-2 px-3 py-2 text-xs text-slate-700 dark:text-[#FFFFFF] hover:bg-slate-100 dark:hover:bg-[#222222] transition-colors w-full"
                   >
                     <SettingsIcon size={14} /> Settings
                   </button>
                   <button
+                    onClick={() => { setMenuOpen(false); logout?.(); }}
                     className="flex items-center gap-2 px-3 py-2 text-xs text-[#FF3D71] hover:bg-slate-100 dark:hover:bg-[#222222] transition-colors w-full"
-                    onClick={() => { setMenuOpen(false); logout && logout(); }}
                   >
                     <LogOut size={14} /> Log out
                   </button>
@@ -312,7 +325,7 @@ const HomePage = () => {
           </div>
         </div>
 
-        {/* Search */}
+        {/* Search bar */}
         <div className="relative">
           <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-[#555555]" />
           <input
@@ -334,22 +347,28 @@ const HomePage = () => {
         </div>
       </div>
 
-      {/* List Body */}
+      {/* ── List Body ── */}
       <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-[#222222]">
-        {isLoading ? (
+        {(isLoading || (isContactsView && isLoadingContacts)) ? (
           <div className="flex justify-center py-10">
             <div className="w-6 h-6 border-2 border-[#FF6B00] border-t-transparent rounded-full animate-spin" />
           </div>
         ) : filteredRows.length === 0 ? (
           <div className="py-20 text-center text-slate-400 dark:text-[#A0A0A0]">
             <p className="text-xs">
-              {isContactsView ? "No contacts found" : "No conversations yet. Start a new chat!"}
+              {isContactsView
+                ? "No contacts found. Make sure other users are registered."
+                : "No conversations yet. Tap + to start a new chat!"}
             </p>
           </div>
         ) : (
           <AnimatePresence initial={false}>
             {filteredRows.map((row) => {
-              const isSelected = activeConversation?._id === row._conv?._id || activeConversation?._id === row._id;
+              const isSelected =
+                activeConversation?._id === row._conv?._id ||
+                activeConversation?._id === row._id;
+              const isStarting = startingChatId === row._id;
+
               return (
                 <motion.div
                   key={row._id}
@@ -362,11 +381,11 @@ const HomePage = () => {
                   }
                   className={`flex items-center gap-3.5 px-4 py-3.5 cursor-pointer transition-all border-b border-slate-100 dark:border-[#222222] ${
                     isSelected
-                      ? "bg-slate-100/70 dark:bg-[#1c1c1c] border-l-4 border-[#FF6B00]"
+                      ? "bg-slate-100/70 dark:bg-[#1c1c1c] border-l-4 border-l-[#FF6B00]"
                       : "hover:bg-slate-50/50 dark:hover:bg-[#111111]/60"
-                  }`}
+                  } ${isStarting ? "opacity-60 pointer-events-none" : ""}`}
                 >
-                  {/* Avatar & Status dot */}
+                  {/* Avatar */}
                   <div className="relative flex-shrink-0">
                     {row.profilePic ? (
                       <img
@@ -376,7 +395,7 @@ const HomePage = () => {
                       />
                     ) : (
                       <div className="w-11 h-11 rounded-full bg-slate-100 dark:bg-[#1c1c1c] border border-slate-200 dark:border-[#222222] text-slate-700 dark:text-[#FFFFFF] flex items-center justify-center font-bold text-sm">
-                        {row.name.charAt(0).toUpperCase()}
+                        {row.name?.charAt(0).toUpperCase() || "?"}
                       </div>
                     )}
                     <div className="absolute bottom-0 right-0">
@@ -384,29 +403,30 @@ const HomePage = () => {
                     </div>
                   </div>
 
-                  {/* Detail */}
+                  {/* Text detail */}
                   <div className="flex-1 text-left min-w-0">
                     <div className="flex justify-between items-baseline gap-1">
                       <h4 className="text-sm font-semibold text-slate-800 dark:text-[#FFFFFF] truncate">
                         {row.name}
                       </h4>
                       {!isContactsView && row.lastMessageTime && (
-                        <span className="text-[10px] text-slate-400 dark:text-[#A0A0A0]">
+                        <span className="text-[10px] text-slate-400 dark:text-[#A0A0A0] flex-shrink-0">
                           {formatPreviewTime(row.lastMessageTime)}
                         </span>
                       )}
                     </div>
+
                     <div className="flex items-center justify-between gap-1 mt-0.5">
                       <div className="flex items-center gap-1 min-w-0 flex-1">
                         {!isContactsView && row.lastMessageMine && (
                           <StatusTick status={row.lastMessageStatus} />
                         )}
                         <p className="text-xs text-slate-400 dark:text-[#A0A0A0] truncate flex-1">
-                          {isContactsView ? "Tap to start chatting" : row.lastMessage}
+                          {isContactsView
+                            ? (isStarting ? "Opening..." : "Tap to start chatting")
+                            : (row.lastMessage || "No messages yet")}
                         </p>
                       </div>
-                      
-                      {/* Offline status last seen display */}
                       {!row.isOnline && row.lastSeen && (
                         <span className="text-[9px] text-[#A0A0A0] flex-shrink-0 ml-1">
                           {formatLastSeen(row.lastSeen)}
@@ -415,11 +435,16 @@ const HomePage = () => {
                     </div>
                   </div>
 
-                  {/* Badge */}
+                  {/* Unread badge */}
                   {!isContactsView && row.unreadCount > 0 && (
                     <span className="flex-shrink-0 min-w-[18px] h-[18px] rounded-full bg-[#FF9E00] text-white text-[9px] font-bold flex items-center justify-center px-1 shadow-lg shadow-[#FF9E00]/20 animate-pulse">
                       {row.unreadCount > 99 ? "99+" : row.unreadCount}
                     </span>
+                  )}
+
+                  {/* Loading spinner while opening */}
+                  {isStarting && (
+                    <div className="w-4 h-4 border-2 border-[#FF6B00] border-t-transparent rounded-full animate-spin flex-shrink-0" />
                   )}
                 </motion.div>
               );
@@ -428,16 +453,16 @@ const HomePage = () => {
         )}
       </div>
 
-      {/* Floating Action Button */}
+      {/* ── FAB: toggle chats / contacts ── */}
       <button
         onClick={() => setActiveView(isContactsView ? "chats" : "contacts")}
         className="absolute bottom-4 right-4 w-12 h-12 bg-[#FF6B00] hover:bg-[#E05E00] text-white rounded-full shadow-2xl transition-transform hover:scale-105 active:scale-95 flex items-center justify-center z-10"
         title={isContactsView ? "Back to chats" : "Start a new chat"}
       >
-        <MessageSquarePlus size={20} />
+        {isContactsView ? <X size={20} /> : <MessageSquarePlus size={20} />}
       </button>
 
-      {/* Side Slide-in Notification Panel */}
+      {/* Notification panel */}
       <NotificationPanel
         isOpen={notifPanelOpen}
         onClose={() => setNotifPanelOpen(false)}

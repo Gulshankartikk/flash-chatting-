@@ -39,11 +39,7 @@ const initilizeSocket = (server) => {
     });
 
     // ─── Online status check ─────────────────────────────────────────────────
-    // ✅ FIX: this always returned `new Date()` as lastSeen whenever the
-    // user was online, which is meaningless — "last seen" should only ever
-    // be a real timestamp from the DB for an *offline* user, and absent
-    // entirely (not "right now") while they're online, matching how
-    // `user_status` and `onUserOffline` already report it everywhere else.
+    
     socket.on("get_user_status", async (requestedUserId, callback) => {
       try {
         const isOnline = onlineUsers.has(requestedUserId);
@@ -64,15 +60,7 @@ const initilizeSocket = (server) => {
     });
 
     // ─── Forward message to receiver ─────────────────────────────────────────
-    // ✅ FIX 1: trust `socket`'s authenticated userId for the sender, not
-    // whatever `message.sender` the client claims — previously any client
-    // could emit a message and impersonate another user as the sender.
-    // ✅ FIX 2: WhatsApp shows a *delivered* double-check the moment the
-    // message reaches the recipient's device (separate from *read*, which
-    // only happens once they open the chat). Previously there was no
-    // "delivered" step at all — a message just silently sat at "sent"
-    // until the receiver happened to open the conversation, so the UI had
-    // no way to show the delivered tick.
+   
     socket.on("send_message", async (message) => {
       try {
         if (!userId) return;
@@ -93,8 +81,7 @@ const initilizeSocket = (server) => {
             avatar: senderUser?.profilePicture || "",
           });
 
-          // Recipient is online right now → mark delivered and tell the
-          // sender so their UI can flip ✓ → ✓✓ (gray).
+          
           if (message._id) {
             await Message.findByIdAndUpdate(message._id, {
               messageStatus: "delivered",
@@ -191,9 +178,7 @@ const initilizeSocket = (server) => {
     });
 
     // ─── Add / update reaction ───────────────────────────────────────────────
-    // ✅ FIX: trust the socket's own `userId`, not the client-supplied
-    // `reactionUserId` — as written, anyone could pass someone else's id
-    // and post a reaction "as" them.
+   
     socket.on("add_reaction", async ({ messageId, emoji }) => {
       try {
         if (!userId) return;
@@ -312,12 +297,7 @@ const initilizeSocket = (server) => {
       try {
         onlineUsers.delete(userId);
 
-        // ✅ FIX: previously the timeouts were cleared but nobody was ever
-        // told typing had stopped — if a user closed the tab/app mid-type,
-        // the other side's "typing…" indicator would stay stuck until its
-        // own 3s timeout (client-side) happened to also catch it, or
-        // forever if that didn't exist. Now we proactively notify every
-        // conversation they were typing in.
+        
         if (typingUsers.has(userId)) {
           const userTyping = typingUsers.get(userId);
           Object.keys(userTyping).forEach((key) => {

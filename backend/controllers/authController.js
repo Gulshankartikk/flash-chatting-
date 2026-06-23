@@ -5,7 +5,7 @@ const response = require("../utils/responseHandler");
 const twilioService = require("../services/twilloService");
 const generateToken = require("../utils/generateToken");
 const { uploadFileToCloudinary } = require("../config/cloudinaryConfig");
-const Conversation = require("../models/conversation");
+const Conversation = require("../models/Conversation");
 const jwt = require("jsonwebtoken"); // ✅ moved to top-level
 
 // STEP 1 — SEND OTP
