@@ -10,6 +10,18 @@ const conversationSchema = new mongoose.Schema(
       },
     ],
 
+    // Canonical, order-independent identifier for a private chat's pair
+    // of participants (e.g. "<idA>_<idB>" with ids sorted as strings).
+    // Array fields can't be uniquely indexed the way we need — MongoDB
+    // indexes each array element separately, not the array as a whole —
+    // so we derive this single string field and put the uniqueness
+    // constraint on it instead. Left undefined for group conversations,
+    // which can legitimately share a participant set across multiple
+    // group chats.
+    participantsKey: {
+      type: String,
+    },
+
     lastMessage: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Message",
@@ -62,9 +74,11 @@ const conversationSchema = new mongoose.Schema(
 
 // Prevent duplicate 1-on-1 conversations between the same two users.
 // Only enforced for private chats — groups can share the same pair
-// of participants across multiple group conversations.
+// of participants across multiple group conversations. This is a
+// sparse index: documents where participantsKey is undefined (all
+// group chats) are simply excluded from the uniqueness check.
 conversationSchema.index(
-  { participants: 1 },
+  { participantsKey: 1 },
   {
     unique: true,
     partialFilterExpression: { conversationType: "private" },

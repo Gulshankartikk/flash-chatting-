@@ -82,7 +82,11 @@ exports.sendMessage = async (req, res) => {
       let conversationDoc = await Conversation.findOne({ participants }).session(session);
 
       if (!conversationDoc) {
-        conversationDoc = new Conversation({ participants, unreadCounts: new Map() });
+        conversationDoc = new Conversation({
+          participants,
+          participantsKey: participants.join("_"),
+          unreadCounts: new Map(),
+        });
       }
 
       newMessage = new Message({
