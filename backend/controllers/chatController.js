@@ -87,12 +87,17 @@ async function handleAIResponse(req, senderId, receiverId, conversationId, userM
 
 // ================= SEND MESSAGE =================
 exports.sendMessage = async (req, res) => {
-  const { senderId, receiverId, content, messageStatus } = req.body;
-  const file = req.file;
+  let { senderId, receiverId, content, messageStatus } = req.body;
+
+  if (!senderId && req.user) {
+    senderId = req.user.userId;
+  }
 
   if (!senderId || !receiverId) {
     return response(res, 400, "senderId and receiverId are required");
   }
+
+  const file = req.file;
 
   if (senderId === receiverId) {
     return response(res, 400, "Cannot send a message to yourself");

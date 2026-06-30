@@ -47,11 +47,14 @@ const ChatWindow = ({ selectedContact, setSelectedContact, isMobile }) => {
   const lastFocusedRef = useRef(null);
 
   const otherUser =
-    activeConversation?.participants?.find((p) => p._id !== currentUser?._id) ||
+    activeConversation?.participants?.find((p) => {
+      const pId = typeof p === "object" ? p?._id : p;
+      return String(pId) !== String(currentUser?._id);
+    }) ||
     selectedContact?.otherUser ||
     selectedContact;
 
-  const otherUserId = otherUser?._id;
+  const otherUserId = typeof otherUser === "object" ? otherUser?._id : otherUser;
 
   const typingUserIds = activeConversation
     ? getTypingUsers(activeConversation._id)

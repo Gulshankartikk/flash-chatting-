@@ -54,14 +54,15 @@ function attachPersistentListeners(user) {
 
 // ─── Initialize ──────────────────────────────────────────────────────────────
 export const initializeSocket = (user) => {
-  // Already connected — just re-announce presence in case of a hot reload
-  if (socket?.connected) {
-    if (user?._id) socket.emit("user_connected", user._id);
-    return socket;
-  }
-
-  // Stale socket (disconnected but not cleaned up) — destroy first
+  // If socket already exists and belongs to the same user, reuse it
   if (socket) {
+    if (socket.userId === user?._id) {
+      if (socket.connected && user?._id) {
+        socket.emit("user_connected", user._id);
+      }
+      return socket;
+    }
+    // User has changed — disconnect the old socket
     socket.removeAllListeners();
     socket.disconnect();
     socket = null;
@@ -72,8 +73,6 @@ export const initializeSocket = (user) => {
   socket = io(BACKEND_URL, {
     withCredentials: true,
     // Prefer WebSocket; fall back to polling only if WS is blocked.
-    // Original order was ["polling", "websocket"] which always starts on
-    // polling and upgrades later — slower first message delivery.
     transports: ["websocket", "polling"],
     reconnectionAttempts: 10,
     reconnectionDelay: 1000,
@@ -81,6 +80,8 @@ export const initializeSocket = (user) => {
     timeout: 20000,
     path: "/socket.io",
   });
+
+  socket.userId = user?._id;
 
   socket.on("connect", () => {
     console.log("[socket] connected:", socket.id);
