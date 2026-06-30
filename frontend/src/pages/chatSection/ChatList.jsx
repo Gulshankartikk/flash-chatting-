@@ -6,71 +6,97 @@ import useUserStore from "../../store/useUserStore";
 import { getAllUser } from "../../services/user.service";
 import StatusDot from "../status/StatusDot";
 
-const ChatRow = ({ contact, isSelected, isDark, onSelect }) => (
-  <div
-    onClick={() => onSelect(contact)}
-    role="button"
-    tabIndex={0}
-    aria-current={isSelected ? "true" : undefined}
-    aria-label={`${contact.name}${contact.unread > 0 ? `, ${contact.unread} unread` : ""}, ${contact.lastMessage}`}
-    onKeyDown={(e) => {
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        onSelect(contact);
+const ChatRow = ({ contact, isSelected, isDark, onSelect }) => {
+  const [decryptedLastMsg, setDecryptedLastMsg] = useState(contact.lastMessage || "");
+
+  useEffect(() => {
+    let active = true;
+    const performDecryption = async () => {
+      const lastMsg = contact.lastMessage || "";
+      if (lastMsg.startsWith("e2ee:") && contact.conversationId) {
+        const { decryptText } = await import("../../utils/crypto");
+        const decrypted = await decryptText(lastMsg, contact.conversationId);
+        if (active) {
+          setDecryptedLastMsg(decrypted);
+        }
+      } else {
+        if (active) {
+          setDecryptedLastMsg(lastMsg);
+        }
       }
-    }}
-    className={`flex items-center gap-3 p-3 cursor-pointer border-b transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6B00]/40 focus-visible:ring-inset ${
-      isDark ? "border-gray-700" : "border-gray-100"
-    } ${
-      isSelected
-        ? isDark
-          ? "bg-[#2a3942]"
-          : "bg-green-50"
-        : isDark
-        ? "hover:bg-[#202c33]"
-        : "hover:bg-gray-50"
-    }`}
-  >
-    {/* Avatar */}
-    <div className="relative flex-shrink-0">
-      {contact.profilePic ? (
-        <img
-          src={contact.profilePic}
-          alt=""
-          className="w-11 h-11 rounded-full object-cover"
-        />
-      ) : (
-        <div
-          className={`w-11 h-11 rounded-full flex items-center justify-center font-medium text-sm ${
-            isDark ? "bg-gray-700 text-gray-200" : "bg-gray-200 text-gray-700"
-          }`}
-        >
-          {contact.name.charAt(0).toUpperCase()}
-        </div>
-      )}
-      {contact.isOnline && (
-        <div className="absolute bottom-0 right-0">
-          <StatusDot isOnline size={10} ringColor={isDark ? "#111b21" : "#FFFFFF"} />
-        </div>
-      )}
-    </div>
+    };
+    performDecryption();
+    return () => {
+      active = false;
+    };
+  }, [contact.lastMessage, contact.conversationId]);
 
-    {/* Text */}
-    <div className="flex-1 min-w-0">
-      <div className="flex justify-between items-baseline">
-        <h3 className="font-medium truncate">{contact.name}</h3>
+  return (
+    <div
+      onClick={() => onSelect(contact)}
+      role="button"
+      tabIndex={0}
+      aria-current={isSelected ? "true" : undefined}
+      aria-label={`${contact.name}${contact.unread > 0 ? `, ${contact.unread} unread` : ""}, ${decryptedLastMsg}`}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect(contact);
+        }
+      }}
+      className={`flex items-center gap-3 p-3 cursor-pointer border-b transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6B00]/40 focus-visible:ring-inset ${
+        isDark ? "border-gray-700" : "border-gray-100"
+      } ${
+        isSelected
+          ? isDark
+            ? "bg-[#2a3942]"
+            : "bg-green-50"
+          : isDark
+          ? "hover:bg-[#202c33]"
+          : "hover:bg-gray-50"
+      }`}
+    >
+      {/* Avatar */}
+      <div className="relative flex-shrink-0">
+        {contact.profilePic ? (
+          <img
+            src={contact.profilePic}
+            alt=""
+            className="w-11 h-11 rounded-full object-cover"
+          />
+        ) : (
+          <div
+            className={`w-11 h-11 rounded-full flex items-center justify-center font-medium text-sm ${
+              isDark ? "bg-gray-700 text-gray-200" : "bg-gray-200 text-gray-700"
+            }`}
+          >
+            {contact.name.charAt(0).toUpperCase()}
+          </div>
+        )}
+        {contact.isOnline && (
+          <div className="absolute bottom-0 right-0">
+            <StatusDot isOnline size={10} ringColor={isDark ? "#111b21" : "#FFFFFF"} />
+          </div>
+        )}
       </div>
-      <p className="text-sm opacity-70 truncate">{contact.lastMessage}</p>
-    </div>
 
-    {/* Unread badge */}
-    {contact.unread > 0 && (
-      <span className="bg-green-500 text-white text-xs font-medium rounded-full px-2 py-0.5 flex-shrink-0">
-        {contact.unread > 99 ? "99+" : contact.unread}
-      </span>
-    )}
-  </div>
-);
+      {/* Text */}
+      <div className="flex-1 min-w-0">
+        <div className="flex justify-between items-baseline">
+          <h3 className="font-medium truncate">{contact.name}</h3>
+        </div>
+        <p className="text-sm opacity-70 truncate">{decryptedLastMsg}</p>
+      </div>
+
+      {/* Unread badge */}
+      {contact.unread > 0 && (
+        <span className="bg-green-500 text-white text-xs font-medium rounded-full px-2 py-0.5 flex-shrink-0">
+          {contact.unread > 99 ? "99+" : contact.unread}
+        </span>
+      )}
+    </div>
+  );
+};
 
 const ChatList = () => {
   const { theme } = useThemeStore();

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Check, CheckCheck, Clock, AlertCircle } from "lucide-react";
 import StatusDot from "../status/StatusDot";
 
@@ -21,6 +21,29 @@ const ConversationItem = ({ item, isActive, onClick, currentUser }) => {
   const lastMsg = item.lastMessage || "";
   const unreadCount = item.unread || 0;
 
+  const [decryptedLastMsg, setDecryptedLastMsg] = useState(lastMsg);
+
+  useEffect(() => {
+    let active = true;
+    const performDecryption = async () => {
+      if (lastMsg.startsWith("e2ee:") && item.id) {
+        const { decryptText } = await import("../../utils/crypto");
+        const decrypted = await decryptText(lastMsg, item.id);
+        if (active) {
+          setDecryptedLastMsg(decrypted);
+        }
+      } else {
+        if (active) {
+          setDecryptedLastMsg(lastMsg);
+        }
+      }
+    };
+    performDecryption();
+    return () => {
+      active = false;
+    };
+  }, [lastMsg, item.id]);
+
   const handleKeyDown = (e) => {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
@@ -29,8 +52,8 @@ const ConversationItem = ({ item, isActive, onClick, currentUser }) => {
   };
 
   const summary = unreadCount > 0
-    ? `${name}, ${unreadCount} unread message${unreadCount > 1 ? "s" : ""}, last message: ${lastMsg || "media"}`
-    : `${name}, last message: ${lastMsg || "media"}`;
+    ? `${name}, ${unreadCount} unread message${unreadCount > 1 ? "s" : ""}, last message: ${decryptedLastMsg || "media"}`
+    : `${name}, last message: ${decryptedLastMsg || "media"}`;
 
   return (
     <div
@@ -79,7 +102,7 @@ const ConversationItem = ({ item, isActive, onClick, currentUser }) => {
         <div className="flex items-center gap-1 mt-0.5">
           {item.lastMessageMine && <StatusTick status={item.lastMessageStatus} />}
           <p className="text-xs text-slate-400 dark:text-[#A0A0A0] truncate flex-1">
-            {lastMsg}
+            {decryptedLastMsg}
           </p>
         </div>
       </div>
