@@ -1,8 +1,14 @@
 import React, { useState, useEffect } from "react";
 import useThemeStore from "../../store/useThemeStore";
 import useUserStore from "../../store/useUserStore";
+import useChatStore from "../../store/chatStore";
 import StatusSelector from "../../components/status/StatusSelector";
 import { updateUserProfile } from "../../services/user.service";
+import { toast } from "react-toastify";
+import axios from "axios";
+
+const API = process.env.REACT_APP_API_URL || "http://localhost:8000";
+const api = axios.create({ baseURL: API, withCredentials: true });
 
 const Setting = () => {
   const { theme, toggleTheme } = useThemeStore();
@@ -24,6 +30,106 @@ const Setting = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+
+  const handleExportBackup = async () => {
+    const password = window.prompt(
+      "Enter a secure password to encrypt your backup file.\nYou will need this password to restore your chats later."
+    );
+    if (!password) {
+      if (password === "") toast.error("Password cannot be empty.");
+      return;
+    }
+
+    setIsExporting(true);
+    try {
+      const { data } = await api.get("/api/chat/backup");
+      if (data && data.success && data.data) {
+        // Client-side Encrypt the backup
+        const { encryptBackup } = await import("../../utils/crypto");
+        const encryptedString = await encryptBackup(data.data, password);
+        
+        const blob = new Blob([encryptedString], { type: "text/plain" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `flash_chat_backup_${new Date().toISOString().slice(0, 10)}.enc`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        toast.success("Encrypted backup exported successfully!");
+      } else {
+        toast.error(data?.message || "Failed to export backup");
+      }
+    } catch (err) {
+      console.error("Export error:", err);
+      toast.error("Failed to export backup: " + (err.response?.data?.message || err.message));
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleImportBackup = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        try {
+          let backupData;
+          const fileContent = event.target.result;
+
+          if (fileContent.startsWith("e2ee-backup:")) {
+            const password = window.prompt("This backup file is encrypted. Please enter the password to decrypt it:");
+            if (!password) {
+              setIsImporting(false);
+              e.target.value = "";
+              return;
+            }
+            const { decryptBackup } = await import("../../utils/crypto");
+            backupData = await decryptBackup(fileContent, password);
+          } else {
+            // Support legacy unencrypted backups
+            if (!window.confirm("This backup file is unencrypted. Do you want to proceed with restoring it?")) {
+              setIsImporting(false);
+              e.target.value = "";
+              return;
+            }
+            backupData = JSON.parse(fileContent);
+          }
+
+          const { data } = await api.post("/api/chat/restore", { backupData });
+          
+          if (data && data.success) {
+            toast.success(data.message || "Backup restored successfully!");
+            const fetchConversations = useChatStore.getState().fetchConversations;
+            if (fetchConversations) {
+              await fetchConversations();
+            }
+          } else {
+            toast.error(data?.message || "Failed to restore backup");
+          }
+        } catch (parseErr) {
+          console.error("Failed to parse or decrypt file:", parseErr);
+          toast.error("Decryption or parsing failed: " + parseErr.message);
+        } finally {
+          setIsImporting(false);
+          e.target.value = "";
+        }
+      };
+      reader.readAsText(file);
+    } catch (err) {
+      console.error("Import error:", err);
+      toast.error("Failed to restore backup: " + err.message);
+      setIsImporting(false);
+      e.target.value = "";
+    }
+  };
 
   useEffect(() => {
     if (currentUser) {
@@ -346,6 +452,33 @@ const Setting = () => {
         checked={showOnlineStatus}
         onChange={() => setShowOnlineStatus((prev) => !prev)}
       />
+
+      {/* Backup & Restore */}
+      <SectionLabel text="Backup & Restore" />
+      <div className="flex flex-col gap-3 px-4 py-4 border-b border-slate-200 dark:border-[#222222] bg-slate-50 dark:bg-[#111111] text-left">
+        <p className="text-xs text-slate-400 dark:text-[#A0A0A0]">
+          Save your chats and messages to your local device or restore them from a previous backup file.
+        </p>
+        <div className="flex gap-3 mt-1">
+          <button
+            onClick={handleExportBackup}
+            disabled={isExporting}
+            className="flex-1 py-2.5 rounded-xl bg-[#FF6B00] hover:bg-[#E05E00] text-white text-xs font-bold transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 shadow-md shadow-[#FF6B00]/10"
+          >
+            {isExporting ? "Exporting..." : "📤 Export Backup"}
+          </button>
+          <label className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-[#222222] hover:bg-slate-100 dark:hover:bg-[#222222] text-slate-800 dark:text-[#FFFFFF] text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer text-center">
+            {isImporting ? "Restoring..." : "📥 Restore Backup"}
+            <input
+              type="file"
+              accept=".json"
+              onChange={handleImportBackup}
+              disabled={isImporting}
+              className="hidden"
+            />
+          </label>
+        </div>
+      </div>
 
       {/* Help */}
       <SectionLabel text="Help" />

@@ -132,6 +132,32 @@ const MessageBubble = ({
   const [lightboxUrl, setLightboxUrl] = useState(null);
   const [lightboxType, setLightboxType] = useState(null);
 
+  const [decryptedContent, setDecryptedContent] = useState(msg.content || msg.message || "");
+
+  useEffect(() => {
+    let active = true;
+    const performDecryption = async () => {
+      const rawText = msg.content || msg.message || "";
+      if (rawText.startsWith("e2ee:")) {
+        const { decryptText } = await import("../../utils/crypto");
+        const decrypted = await decryptText(rawText, msg.conversationId || msg.conversation?._id || msg.conversation);
+        if (active) {
+          setDecryptedContent(decrypted);
+          setEditText(decrypted);
+        }
+      } else {
+        if (active) {
+          setDecryptedContent(rawText);
+          setEditText(rawText);
+        }
+      }
+    };
+    performDecryption();
+    return () => {
+      active = false;
+    };
+  }, [msg.content, msg.message, msg.conversationId, msg.conversation]);
+
   const pickerRef = useRef(null);
   const menuRef = useRef(null);
   const editTextareaRef = useRef(null);
@@ -191,7 +217,7 @@ const MessageBubble = ({
   };
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(msg.content || msg.message || "");
+    navigator.clipboard.writeText(decryptedContent);
     toast.success("Copied to clipboard");
     setContextMenuOpen(false);
   };
@@ -231,7 +257,7 @@ const MessageBubble = ({
   const isDocument = msg.contentType === "document" || msg.messageType === "document";
   const isGif = msg.contentType === "gif" || msg.messageType === "gif" || (msg.imageOrVideoUrl && msg.imageOrVideoUrl.endsWith(".gif"));
 
-  const isPureEmoji = isOnlyEmojis(msg.content || msg.message) && !isImage && !isVideo && !isAudio && !isDocument && !isGif;
+  const isPureEmoji = isOnlyEmojis(decryptedContent) && !isImage && !isVideo && !isAudio && !isDocument && !isGif;
 
   const isDeleted = msg.isDeletedForEveryone || msg.isDeleted;
 
@@ -393,13 +419,13 @@ const MessageBubble = ({
                 </div>
               )}
 
-              {(msg.content || msg.message) && !isPureEmoji ? (
+              {decryptedContent && !isPureEmoji ? (
                 <p className="text-[14.5px] leading-relaxed break-words text-left">
-                  {msg.content || msg.message}
+                  {decryptedContent}
                 </p>
               ) : isPureEmoji ? (
                 <p className="text-4xl leading-relaxed break-words text-center py-1">
-                  {msg.content || msg.message}
+                  {decryptedContent}
                 </p>
               ) : null}
 
@@ -407,6 +433,7 @@ const MessageBubble = ({
               <div className={`flex items-center justify-end gap-1.5 mt-1 text-[10px] text-[#A0A0A0]/80 ${isPureEmoji ? "absolute bottom-1 right-2 bg-black/60 rounded px-1" : ""}`}>
                 <span>{formatTime(msg.createdAt)}</span>
                 {msg.isEdited && <span className="text-[9px] italic">(edited)</span>}
+                {msg.content?.startsWith("e2ee:") && <span className="text-[10px]" title="End-to-End Encrypted">🔒</span>}
                 {isMine && <StatusTick status={msg.messageStatus || msg.status} />}
               </div>
             </>
@@ -509,7 +536,7 @@ const MessageBubble = ({
               <button
                 onClick={() => {
                   setIsEditing(true);
-                  setEditText(msg.content || msg.message || "");
+                  setEditText(decryptedContent);
                   setContextMenuOpen(false);
                 }}
                 className="flex items-center gap-2 px-3 py-2 text-xs text-slate-800 dark:text-[#FFFFFF] hover:bg-slate-100 dark:hover:bg-[#222222] transition-colors w-full"

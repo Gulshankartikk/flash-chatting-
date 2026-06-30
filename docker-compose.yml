@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:alpine
+    container_name: flash-chat-redis
+    ports:
+      - "6379:6379"
+    restart: always
+
+  mongo:
+    image: mongo:latest
+    container_name: flash-chat-db
+    ports:
+      - "27017:27017"
+    restart: always
+
+  backend:
+    build: ./backend
+    container_name: flash-chat-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - MONGO_URI=mongodb://mongo:27017/flash-chat
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=your_jwt_secret_here
+      - FRONTEND_URL=http://localhost:3000
+    depends_on:
+      - redis
+      - mongo
+    restart: always
+
+  frontend:
+    build: ./frontend
+    container_name: flash-chat-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: always

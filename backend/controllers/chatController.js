@@ -1,8 +1,10 @@
 const mongoose = require("mongoose");
 const { uploadFileCloudinary } = require("../config/cloudinaryConfig");
-const Conversation = require("../models/conversation");
+const Conversation = require("../models/Conversation");
 const Message = require("../models/message");
+const User = require("../models/user");
 const response = require("../utils/responseHandler");
+const { generateAIResponse } = require("../services/aiService");
 
 const EDIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes, like WhatsApp
 const DELETE_FOR_EVERYONE_WINDOW_MS = 60 * 60 * 1000; // 1 hour
@@ -21,6 +23,65 @@ function emitToUser(req, userId, event, payload) {
   const socketId = req.socketUserMap.get(String(userId));
   if (socketId) {
     req.io.to(socketId).emit(event, payload);
+  }
+}
+
+// Background handler for AI chatbot replies
+async function handleAIResponse(req, senderId, receiverId, conversationId, userMessageContent) {
+  try {
+    // 1. Send typing indicator from AI Bot
+    emitToUser(req, senderId, "user_typing", {
+      userId: receiverId, // AI Bot is the typing user
+      conversationId,
+      isTyping: true,
+    });
+
+    // 2. Fetch recent conversation history for context
+    const history = await Message.find({ conversation: conversationId })
+      .sort({ createdAt: -1 })
+      .limit(10);
+    // reverse to chronological order
+    history.reverse();
+
+    // 3. Generate response
+    const aiReply = await generateAIResponse(userMessageContent, history);
+
+    // 4. Simulate typing delay
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
+    // 5. Save AI's response in DB
+    const aiMessage = new Message({
+      conversation: conversationId,
+      sender: receiverId, // AI is sender
+      receiver: senderId,
+      content: aiReply,
+      contentType: "text",
+      messageStatus: "seen",
+    });
+
+    await aiMessage.save();
+
+    const populatedAIResponse = await Message.findById(aiMessage._id)
+      .populate("sender", "username profilePicture")
+      .populate("receiver", "username profilePicture")
+      .populate("conversation", "participants lastMessage");
+
+    // Update conversation's lastMessage
+    await Conversation.findByIdAndUpdate(conversationId, {
+      lastMessage: aiMessage._id,
+    });
+
+    // 6. Stop typing and emit the message
+    emitToUser(req, senderId, "user_typing", {
+      userId: receiverId,
+      conversationId,
+      isTyping: false,
+    });
+
+    emitToUser(req, senderId, "receive_message", populatedAIResponse);
+
+  } catch (err) {
+    console.error("Error in AI response handler:", err);
   }
 }
 
@@ -75,8 +136,12 @@ exports.sendMessage = async (req, res) => {
     let newMessage;
     let populatedMessage;
     let wasDeliveredImmediately = false;
+    let isReceiverAIBot = false;
 
     await session.withTransaction(async () => {
+      const receiverUser = await User.findById(receiverId).session(session);
+      isReceiverAIBot = receiverUser?.isAIBot || false;
+
       const participants = [senderId, receiverId].sort();
 
       let conversationDoc = await Conversation.findOne({ participants }).session(session);
@@ -99,22 +164,29 @@ exports.sendMessage = async (req, res) => {
         messageStatus: messageStatus || "sent",
       });
 
-      // Mark delivered immediately if the receiver is currently online.
-      // Done here (pre-save) instead of as a second save, to avoid an extra write.
-      const receiverSocketId = req.socketUserMap?.get(String(receiverId));
-      if (receiverSocketId) {
-        newMessage.messageStatus = "delivered";
-        newMessage.deliveredTo.push({ user: receiverId });
+      if (isReceiverAIBot) {
+        newMessage.messageStatus = "seen";
+        newMessage.seenBy.push({ user: receiverId });
         wasDeliveredImmediately = true;
+      } else {
+        // Mark delivered immediately if the receiver is currently online.
+        const receiverSocketId = req.socketUserMap?.get(String(receiverId));
+        if (receiverSocketId) {
+          newMessage.messageStatus = "delivered";
+          newMessage.deliveredTo.push({ user: receiverId });
+          wasDeliveredImmediately = true;
+        }
       }
 
       await newMessage.save({ session });
 
       conversationDoc.lastMessage = newMessage._id;
 
-      if (!conversationDoc.unreadCounts) conversationDoc.unreadCounts = new Map();
-      const currentUnread = conversationDoc.unreadCounts.get(String(receiverId)) || 0;
-      conversationDoc.unreadCounts.set(String(receiverId), currentUnread + 1);
+      if (!isReceiverAIBot) {
+        if (!conversationDoc.unreadCounts) conversationDoc.unreadCounts = new Map();
+        const currentUnread = conversationDoc.unreadCounts.get(String(receiverId)) || 0;
+        conversationDoc.unreadCounts.set(String(receiverId), currentUnread + 1);
+      }
 
       await conversationDoc.save({ session });
     });
@@ -124,15 +196,20 @@ exports.sendMessage = async (req, res) => {
       .populate("receiver", "username profilePicture")
       .populate("conversation", "participants lastMessage");
 
-    const receiverSocketId = req.socketUserMap?.get(String(receiverId));
-    if (receiverSocketId) {
-      emitToUser(req, receiverId, "receive_message", populatedMessage);
+    if (isReceiverAIBot) {
+      // Trigger background AI response
+      handleAIResponse(req, senderId, receiverId, newMessage.conversation, content?.trim() || "");
+    } else {
+      const receiverSocketId = req.socketUserMap?.get(String(receiverId));
+      if (receiverSocketId) {
+        emitToUser(req, receiverId, "receive_message", populatedMessage);
 
-      if (wasDeliveredImmediately) {
-        emitToUser(req, senderId, "message_status_update", {
-          messageId: newMessage._id,
-          messageStatus: "delivered",
-        });
+        if (wasDeliveredImmediately) {
+          emitToUser(req, senderId, "message_status_update", {
+            messageId: newMessage._id,
+            messageStatus: "delivered",
+          });
+        }
       }
     }
 
@@ -142,6 +219,200 @@ exports.sendMessage = async (req, res) => {
     return response(res, 500, "Internal server error");
   } finally {
     session.endSession();
+  }
+};
+
+// ================= EXPORT BACKUP =================
+exports.exportBackup = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    const conversations = await Conversation.find({ participants: userId })
+      .populate("participants", "username email phoneNumber phoneSuffix profilePicture about isAIBot");
+
+    const conversationIds = conversations.map(c => c._id);
+
+    const messages = await Message.find({
+      conversation: { $in: conversationIds },
+      deletedFor: { $ne: userId }
+    }).populate("sender", "username email phoneNumber phoneSuffix isAIBot")
+      .populate("receiver", "username email phoneNumber phoneSuffix isAIBot");
+
+    const backupData = {
+      version: "1.0.0",
+      exportedAt: new Date().toISOString(),
+      conversations,
+      messages
+    };
+
+    return response(res, 200, "Backup exported successfully", backupData);
+  } catch (error) {
+    console.error("Export backup error:", error);
+    return response(res, 500, "Failed to export backup");
+  }
+};
+
+// ================= IMPORT BACKUP =================
+exports.importBackup = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { backupData } = req.body;
+
+    if (!backupData || !Array.isArray(backupData.conversations) || !Array.isArray(backupData.messages)) {
+      return response(res, 400, "Invalid backup data format");
+    }
+
+    const conversationIdMap = {};
+
+    // 1. Restore conversations
+    for (const oldConv of backupData.conversations) {
+      if (!oldConv.participants || oldConv.participants.length === 0) continue;
+
+      const participantIds = [];
+      for (const p of oldConv.participants) {
+        let userDoc = null;
+        if (p.email) {
+          userDoc = await User.findOne({ email: p.email.toLowerCase() });
+        } else if (p.phoneNumber) {
+          userDoc = await User.findOne({ phoneNumber: p.phoneNumber });
+        }
+        
+        if (userDoc) {
+          participantIds.push(userDoc._id.toString());
+        } else {
+          if (p.isAIBot || p.email === "ai@flashchat.com") {
+            const aiBot = await User.findOne({ isAIBot: true });
+            if (aiBot) participantIds.push(aiBot._id.toString());
+          }
+        }
+      }
+
+      if (!participantIds.includes(userId.toString())) {
+        participantIds.push(userId.toString());
+      }
+
+      participantIds.sort();
+
+      const convType = oldConv.conversationType || "private";
+      let existingConv = null;
+
+      if (convType === "private") {
+        const participantsKey = participantIds.join("_");
+        existingConv = await Conversation.findOne({ participantsKey });
+        
+        if (!existingConv) {
+          existingConv = new Conversation({
+            participants: participantIds,
+            participantsKey,
+            conversationType: "private",
+            unreadCounts: new Map()
+          });
+          await existingConv.save();
+        }
+      } else {
+        existingConv = await Conversation.findOne({
+          conversationType: "group",
+          groupName: oldConv.groupName,
+          participants: { $all: participantIds }
+        });
+
+        if (!existingConv) {
+          existingConv = new Conversation({
+            participants: participantIds,
+            conversationType: "group",
+            groupName: oldConv.groupName || "Restored Group",
+            groupAvatar: oldConv.groupAvatar,
+            groupAdmins: [userId],
+            unreadCounts: new Map()
+          });
+          await existingConv.save();
+        }
+      }
+
+      conversationIdMap[oldConv._id] = existingConv._id.toString();
+    }
+
+    // 2. Restore messages
+    let restoredCount = 0;
+    for (const oldMsg of backupData.messages) {
+      const newConvId = conversationIdMap[oldMsg.conversation?._id || oldMsg.conversation];
+      if (!newConvId) continue;
+
+      let newSenderId = userId;
+      if (oldMsg.sender) {
+        const senderEmail = oldMsg.sender.email;
+        const senderPhone = oldMsg.sender.phoneNumber;
+        let senderDoc = null;
+        
+        if (senderEmail) {
+          senderDoc = await User.findOne({ email: senderEmail.toLowerCase() });
+        } else if (senderPhone) {
+          senderDoc = await User.findOne({ phoneNumber: senderPhone });
+        }
+
+        if (senderDoc) {
+          newSenderId = senderDoc._id;
+        } else if (oldMsg.sender.isAIBot || senderEmail === "ai@flashchat.com") {
+          const aiBot = await User.findOne({ isAIBot: true });
+          if (aiBot) newSenderId = aiBot._id;
+        }
+      }
+
+      let newReceiverId = null;
+      if (oldMsg.receiver) {
+        const receiverEmail = oldMsg.receiver.email;
+        const receiverPhone = oldMsg.receiver.phoneNumber;
+        let receiverDoc = null;
+
+        if (receiverEmail) {
+          receiverDoc = await User.findOne({ email: receiverEmail.toLowerCase() });
+        } else if (receiverPhone) {
+          receiverDoc = await User.findOne({ phoneNumber: receiverPhone });
+        }
+
+        if (receiverDoc) {
+          newReceiverId = receiverDoc._id;
+        } else if (oldMsg.receiver.isAIBot || receiverEmail === "ai@flashchat.com") {
+          const aiBot = await User.findOne({ isAIBot: true });
+          if (aiBot) newReceiverId = aiBot._id;
+        }
+      }
+
+      const msgExists = await Message.findOne({
+        conversation: newConvId,
+        sender: newSenderId,
+        content: oldMsg.content,
+        createdAt: oldMsg.createdAt
+      });
+
+      if (!msgExists) {
+        const newMsg = new Message({
+          conversation: newConvId,
+          sender: newSenderId,
+          receiver: newReceiverId,
+          content: oldMsg.content,
+          contentType: oldMsg.contentType || "text",
+          imageOrVideoUrl: oldMsg.imageOrVideoUrl,
+          messageStatus: oldMsg.messageStatus || "seen",
+          isDeletedForEveryone: oldMsg.isDeletedForEveryone || false,
+          isEdited: oldMsg.isEdited || false,
+          isPinned: oldMsg.isPinned || false,
+          createdAt: oldMsg.createdAt,
+          updatedAt: oldMsg.updatedAt
+        });
+        await newMsg.save();
+        restoredCount++;
+
+        await Conversation.findByIdAndUpdate(newConvId, {
+          lastMessage: newMsg._id
+        });
+      }
+    }
+
+    return response(res, 200, `Backup restored successfully. Restored ${restoredCount} new messages.`, { restoredCount });
+  } catch (error) {
+    console.error("Import backup error:", error);
+    return response(res, 500, "Failed to restore backup");
   }
 };
 

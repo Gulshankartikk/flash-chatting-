@@ -60,4 +60,16 @@ router.put(
   chatController.pinMessage
 );
 
+router.get(
+  "/backup",
+  authMiddleware,
+  chatController.exportBackup
+);
+
+router.post(
+  "/restore",
+  authMiddleware,
+  chatController.importBackup
+);
+
 module.exports = router;

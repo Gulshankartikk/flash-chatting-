@@ -26,6 +26,59 @@ app.use(express.json());
 app.use(cookieParser());
 app.use(bodyParser.urlencoded({ extended: true }));
 
+// Rate Limiting
+let rateLimit;
+try {
+    rateLimit = require('express-rate-limit');
+} catch (err) {
+    console.warn("[rate-limit] express-rate-limit package not found. Using in-memory fallback rate limiter.");
+    rateLimit = (options) => {
+        const ipCache = new Map();
+        const windowMs = options.windowMs || 15 * 60 * 1000;
+        const max = options.max || 100;
+        const message = options.message || "Too many requests, please try again later.";
+
+        return (req, res, next) => {
+            const ip = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+            const now = Date.now();
+            
+            if (!ipCache.has(ip)) {
+                ipCache.set(ip, { count: 1, resetTime: now + windowMs });
+                return next();
+            }
+
+            const data = ipCache.get(ip);
+            if (now > data.resetTime) {
+                data.count = 1;
+                data.resetTime = now + windowMs;
+                return next();
+            }
+
+            data.count++;
+            if (data.count > max) {
+                return res.status(429).json({ success: false, message });
+            }
+            next();
+        };
+    };
+}
+
+const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 200,
+    message: "Too many requests from this IP, please try again after 15 minutes"
+});
+
+const authLimiter = rateLimit({
+    windowMs: 5 * 60 * 1000,
+    max: 15,
+    message: "Too many login attempts from this IP, please try again after 5 minutes"
+});
+
+app.use('/api', apiLimiter);
+app.use('/api/auth/send-otp', authLimiter);
+app.use('/api/auth/verify-otp', authLimiter);
+
 const server = http.createServer(app);
 const io = initilizeSocket(server);
 
@@ -35,7 +88,31 @@ app.use((req, res, next) => {
     next();
 });
 
-connectDB();
+const User = require('./models/user');
+
+const ensureAIBotUser = async () => {
+    try {
+        const aiUser = await User.findOne({ email: "ai@flashchat.com" });
+        if (!aiUser) {
+            await User.create({
+                username: "Flash AI",
+                email: "ai@flashchat.com",
+                about: "Your AI Chat Assistant. Ask me anything!",
+                isVerified: true,
+                isOnline: true,
+                isAIBot: true,
+                profilePicture: "https://robohash.org/flash-ai.png?set=set4",
+            });
+            console.log("AI Bot user initialized.");
+        }
+    } catch (err) {
+        console.error("Error initializing AI Bot user:", err);
+    }
+};
+
+connectDB().then(() => {
+    ensureAIBotUser();
+});
 
 app.use('/api/auth', authRoute);
 app.use('/api/chat', chatRoute);

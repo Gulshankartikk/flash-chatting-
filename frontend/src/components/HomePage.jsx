@@ -349,6 +349,44 @@ const HomePage = () => {
 
       {/* ── List Body ── */}
       <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-[#222222]">
+        {/* Quick AI Assistant Shortcut */}
+        {!isContactsView && !query && (
+          <div
+            onClick={async () => {
+              const aiContact = contacts.find(c => c._raw?.isAIBot || c.name === "Flash AI");
+              if (aiContact) {
+                handleStartChat(aiContact);
+              } else {
+                // If not found in contacts yet, we can try to find it dynamically from raw list
+                toast.info("Opening AI Assistant...");
+                // Fallback: search contacts or show info
+                const rawAI = contacts.find(c => c.name?.toLowerCase().includes("ai"));
+                if (rawAI) handleStartChat(rawAI);
+                else toast.error("AI Assistant not found. Please refresh.");
+              }
+            }}
+            className="flex items-center gap-3.5 px-4 py-3.5 bg-gradient-to-r from-[#FF6B00]/10 to-purple-500/10 hover:from-[#FF6B00]/15 hover:to-purple-500/15 cursor-pointer border-b border-slate-100 dark:border-[#222222] transition-all group"
+          >
+            <div className="relative flex-shrink-0 w-11 h-11 rounded-full bg-gradient-to-tr from-[#FF6B00] to-purple-500 text-white flex items-center justify-center font-bold text-lg shadow-md shadow-[#FF6B00]/10 group-hover:scale-105 transition-transform">
+              🤖
+            </div>
+            <div className="flex-1 text-left">
+              <div className="flex items-center gap-1.5">
+                <h4 className="text-sm font-bold text-slate-800 dark:text-white">
+                  Flash AI Chatbot
+                </h4>
+                <span className="text-[8px] bg-gradient-to-r from-[#FF6B00] to-purple-500 text-white font-extrabold px-1.5 py-0.5 rounded-full uppercase tracking-wider">
+                  AI Assistant
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-[#A0A0A0] mt-0.5">
+                Ask questions, get help, or just have a conversation!
+              </p>
+            </div>
+            <span className="text-[#FF6B00] text-lg font-bold group-hover:translate-x-1 transition-transform">›</span>
+          </div>
+        )}
+
         {(isLoading || (isContactsView && isLoadingContacts)) ? (
           <div className="flex justify-center py-10">
             <div className="w-6 h-6 border-2 border-[#FF6B00] border-t-transparent rounded-full animate-spin" />

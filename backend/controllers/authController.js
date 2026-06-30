@@ -6,7 +6,8 @@ const twilioService = require("../services/twilloService");
 const generateToken = require("../utils/generateToken");
 const { uploadFileToCloudinary } = require("../config/cloudinaryConfig");
 const Conversation = require("../models/Conversation");
-const jwt = require("jsonwebtoken"); // ✅ moved to top-level
+const jwt = require("jsonwebtoken");
+const cache = require("../config/redis");
 
 // STEP 1 — SEND OTP
 const sendOtp = async (req, res) => {
@@ -149,6 +150,7 @@ const updateProfile = async (req, res) => {
     if (typeof agreed !== "undefined") user.agreed = agreed;
 
     await user.save();
+    await cache.del(`user:${userId}`);
     return response(res, 200, "Profile updated successfully", user);
   } catch (error) {
     // Duplicate key on the unique username index — most likely two
@@ -186,7 +188,16 @@ const checkAuthenticated = async (req, res) => {
     }
 
     const decoded = jwt.verify(authToken, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.userId).select("-emailOtp -emailOtpExpiry");
+    const cacheKey = `user:${decoded.userId}`;
+    
+    let user = await cache.get(cacheKey);
+    if (!user) {
+      user = await User.findById(decoded.userId).select("-emailOtp -emailOtpExpiry");
+      if (user) {
+        await cache.set(cacheKey, user, 3600); // Cache for 1 hour
+      }
+    }
+    
     if (!user) {
       return response(res, 200, "User not found", { isAuthenticated: false, user: null });
     }
@@ -259,6 +270,7 @@ const updateUserStatus = async (req, res) => {
     if (customStatusText) user.about = customStatusText;
 
     await user.save();
+    await cache.del(`user:${id}`);
     return response(res, 200, "Status updated successfully", user);
   } catch (error) {
     console.error("updateUserStatus error:", error);

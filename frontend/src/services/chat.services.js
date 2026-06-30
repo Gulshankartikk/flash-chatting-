@@ -1,4 +1,5 @@
 import { io } from "socket.io-client";
+import { toast } from "react-toastify";
 
 // ─── Module-level state ───────────────────────────────────────────────────────
 let socket = null;
@@ -83,17 +84,32 @@ export const initializeSocket = (user) => {
 
   socket.on("connect", () => {
     console.log("[socket] connected:", socket.id);
+    toast.dismiss("socket-status");
     attachPersistentListeners(user);
   });
 
   // Re-attach all listeners after every reconnect so nothing is lost
   socket.io.on("reconnect", (attempt) => {
     console.log(`[socket] reconnected after ${attempt} attempt(s)`);
+    toast.success("Reconnected to chat server!", { toastId: "socket-status", autoClose: 3000 });
     attachPersistentListeners(user);
   });
 
   socket.on("connect_error", (err) => {
     console.error("[socket] connect_error:", err.message);
+    toast.warning("Connection lost. Reconnecting to chat server...", {
+      toastId: "socket-status",
+      autoClose: false,
+      closeOnClick: false,
+      draggable: false,
+    });
+  });
+
+  socket.io.on("reconnect_failed", () => {
+    toast.error("Could not reconnect to chat server. Please refresh the page.", {
+      toastId: "socket-status",
+      autoClose: false,
+    });
   });
 
   socket.on("disconnect", (reason) => {

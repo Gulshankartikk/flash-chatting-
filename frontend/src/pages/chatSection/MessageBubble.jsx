@@ -36,6 +36,30 @@ const MessageBubble = ({
   const [pickerOpen, setPickerOpen] = useState(false);
   const pickerRef = useRef(null);
 
+  const [decryptedContent, setDecryptedContent] = useState(msg.message || msg.content || "");
+
+  useEffect(() => {
+    let active = true;
+    const performDecryption = async () => {
+      const rawText = msg.message || msg.content || "";
+      if (rawText.startsWith("e2ee:")) {
+        const { decryptText } = await import("../../utils/crypto");
+        const decrypted = await decryptText(rawText, msg.conversationId || msg.conversation?._id || msg.conversation);
+        if (active) {
+          setDecryptedContent(decrypted);
+        }
+      } else {
+        if (active) {
+          setDecryptedContent(rawText);
+        }
+      }
+    };
+    performDecryption();
+    return () => {
+      active = false;
+    };
+  }, [msg.message, msg.content, msg.conversationId, msg.conversation]);
+
   const isMine = !!msg.isMine;
   const isFailed = msg.status === "failed";
   const isSending = msg.status === "sending";
@@ -255,7 +279,7 @@ const MessageBubble = ({
                   <DocumentLink url={msg.mediaUrl} linkStyle={documentLinkStyle} />
                 ) : null}
 
-                {msg.message ? (
+                {decryptedContent ? (
                   <p
                     style={{
                       fontSize: 14.5,
@@ -266,7 +290,7 @@ const MessageBubble = ({
                       paddingRight: 46, // reserve room so time/tick doesn't overlap last line awkwardly (WA style)
                     }}
                   >
-                    {msg.message}
+                    {decryptedContent}
                   </p>
                 ) : null}
               </React.Fragment>
@@ -309,6 +333,7 @@ const MessageBubble = ({
                   <Pencil size={9} /> edited
                 </span>
               ) : null}
+              {msg.message?.startsWith("e2ee:") && <span style={{ fontSize: 10.5, marginRight: 2 }} title="End-to-End Encrypted">🔒</span>}
               <span style={{ fontSize: 11, color: sub }}>{formatTime(msg.createdAt)}</span>
               {isMine && !msg.isDeleted ? (
                 <StatusTick status={msg.status} accent={accent} sub={sub} />
@@ -339,16 +364,14 @@ const MessageBubble = ({
                     alignItems: "center",
                     gap: 3,
                     border: r.mine ? `1.5px solid ${accent}` : `1px solid ${panelBorder}`,
-                    background: panelBg,
-                    borderRadius: 999,
+                    borderRadius: 20,
                     padding: "2px 6px",
-                    fontSize: 12,
-                    lineHeight: 1.5,
+                    background: panelBg,
                     cursor: "pointer",
-                    boxShadow: "0 1px 3px rgba(0,0,0,0.18)",
+                    boxShadow: "0 1px 2px rgba(0,0,0,0.08)",
                   }}
                 >
-                  <span>{r.emoji}</span>
+                  <span style={{ fontSize: 12.5 }}>{r.emoji}</span>
                   {r.count > 1 ? (
                     <span style={{ fontSize: 10.5, color: sub, fontWeight: 600 }}>{r.count}</span>
                   ) : null}

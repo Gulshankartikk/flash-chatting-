@@ -400,6 +400,14 @@ const useChatStore = create((set, get) => ({
 
     try {
       let savedMessage;
+      const isAIBot = activeConversation.participants?.some(p => p.isAIBot || p.email === "ai@flashchat.com");
+      const shouldEncrypt = messageType === "text" && activeConversation.conversationType === "private" && !isAIBot;
+      
+      let messageToSend = message;
+      if (shouldEncrypt) {
+        const { encryptText } = await import("../utils/crypto");
+        messageToSend = await encryptText(message, activeConversation._id);
+      }
 
       if (mediaFile) {
         const formData = new FormData();
@@ -420,7 +428,7 @@ const useChatStore = create((set, get) => ({
           emitSendMessage({
             conversationId: activeConversation._id,
             receiverId,
-            message,
+            message: messageToSend,
             messageType,
             replyToId: replyTo?._id || null,
           });
@@ -429,7 +437,7 @@ const useChatStore = create((set, get) => ({
         const { data: msgData } = await api.post(`/api/chat/send-message`, {
           senderId: get().currentUser?._id,
           receiverId,
-          content: message,
+          content: messageToSend,
           contentType: messageType,
         });
         savedMessage = normalizeMessage(msgData?.data || msgData);
